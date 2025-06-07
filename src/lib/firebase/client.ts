@@ -15,10 +15,10 @@ const firebaseConfig = {
   apiKey: "YOUR_FIREBASE_API_KEY",
   authDomain: "life-os-yke0o.firebaseapp.com",
   projectId: "life-os-yke0o",
-  storageBucket: "life-os-yke0o.firebasestorage.app", // Ensuring this matches user input
+  storageBucket: "life-os-yke0o.firebasestorage.app", // Using the exact string provided by the user
   messagingSenderId: "223755691371",
   appId: "1:223755691371:web:f22a2841224236fdf8582e"
-  // measurementId: "YOUR_MEASUREMENT_ID_FROM_FIREBASE_CONSOLE" // Optional, include if present
+  // measurementId: "YOUR_MEASUREMENT_ID_FROM_FIREBASE_CONSOLE" // Optional
 };
 
 // Initialize Firebase
