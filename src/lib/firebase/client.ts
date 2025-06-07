@@ -6,17 +6,18 @@ import { getAuth } from "firebase/auth";
 // https://firebase.google.com/docs/web/setup#available-libraries
 
 // ==========================================================================================
-// IMPORTANT: Paste your web app's Firebase configuration directly from the Firebase Console
-// (Project settings -> Your apps -> Web app -> SDK setup and configuration -> Config)
-// into the firebaseConfig object below.
+// Your web app's Firebase configuration
+// THIS CONFIGURATION WAS PROVIDED BY THE USER.
+// If "auth/configuration-not-found" errors persist,
+// please double-check these values against your Firebase project settings.
 // ==========================================================================================
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY_FROM_FIREBASE_CONSOLE",
-  authDomain: "YOUR_AUTH_DOMAIN_FROM_FIREBASE_CONSOLE",
-  projectId: "YOUR_PROJECT_ID_FROM_FIREBASE_CONSOLE",
-  storageBucket: "YOUR_STORAGE_BUCKET_FROM_FIREBASE_CONSOLE",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID_FROM_FIREBASE_CONSOLE",
-  appId: "YOUR_APP_ID_FROM_FIREBASE_CONSOLE"
+  apiKey: "YOUR_FIREBASE_API_KEY",
+  authDomain: "life-os-yke0o.firebaseapp.com",
+  projectId: "life-os-yke0o",
+  storageBucket: "life-os-yke0o.firebasestorage.app", // Ensuring this matches user input
+  messagingSenderId: "223755691371",
+  appId: "1:223755691371:web:f22a2841224236fdf8582e"
   // measurementId: "YOUR_MEASUREMENT_ID_FROM_FIREBASE_CONSOLE" // Optional, include if present
 };
 
