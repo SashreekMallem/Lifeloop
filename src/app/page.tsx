@@ -2,7 +2,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import WeatherWidget from "@/components/life-os/widgets/WeatherWidget"; // Import the WeatherWidget
+import WeatherWidget from "@/components/life-os/widgets/WeatherWidget";
+import CalendarWidget from "@/components/life-os/widgets/CalendarWidget"; // Import CalendarWidget
 
 const bootSequenceLines = [
   { id: 1, text: "Booting AI Core..." },
@@ -67,17 +68,13 @@ export default function LifeOSDashboard() {
             System Dashboard
           </h1>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Add WeatherWidget here */}
             <WeatherWidget className="md:col-span-1 lg:col-span-1 min-h-[280px]" defaultLocation="London, UK" />
+            <CalendarWidget className="md:col-span-1 lg:col-span-1 min-h-[300px]" />
             
             {/* Placeholder for other widgets/modules as they are re-integrated */}
             {/* Example:
             <div className="md:col-span-1 lg:col-span-1 p-4 glassmorphic rounded-xl min-h-[280px]">
               <h3 className="text-xl font-semibold text-primary mb-2">Module Placeholder 1</h3>
-              <p className="text-muted-foreground">Content will appear here.</p>
-            </div>
-            <div className="md:col-span-1 lg:col-span-1 p-4 glassmorphic rounded-xl min-h-[280px]">
-              <h3 className="text-xl font-semibold text-primary mb-2">Module Placeholder 2</h3>
               <p className="text-muted-foreground">Content will appear here.</p>
             </div>
             */}
