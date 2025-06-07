@@ -25,7 +25,7 @@ const LifeXPWidget = ({ className }: LifeXPWidgetProps) => {
           </div>
           <p className="text-sm text-muted-foreground">Next Tier: {nextLevelXP.toLocaleString()} XP</p>
         </div>
-        
+
         <div className="my-auto"> {/* Vertically center the progress bar area */}
           <Progress value={progressPercent} className="h-3 bg-primary/10 rounded-full overflow-hidden" indicatorClassName="bg-primary glowing-accent rounded-full" />
           <p className="text-xs text-muted-foreground mt-2 text-right">
@@ -44,33 +44,4 @@ const LifeXPWidget = ({ className }: LifeXPWidgetProps) => {
   );
 };
 
-// Add to Progress component if indicatorClassName is not standard
-// In components/ui/progress.tsx:
-// Add indicatorClassName prop to ProgressProps and pass it to ProgressPrimitive.Indicator
-// const Progress = React.forwardRef<..., ProgressProps>(({ className, value, indicatorClassName, ...props }, ref) => (
-// ...
-//    <ProgressPrimitive.Indicator
-//      className={cn("h-full w-full flex-1 bg-primary transition-all", indicatorClassName)}
-// ...
-// ))
-//
-// This might require modifying shadcn's progress component directly, or for simplicity here,
-// we can assume a simple glowing effect applied to the parent if direct child styling isn't easy.
-// For now, the glowing-accent on the indicator should work if we can style the inner div.
-// If not, we might need a wrapper div for the Progress component.
-// For this iteration, assuming `indicatorClassName` is available or `glowing-accent` on the main `Progress` component has some effect.
-// A better approach for `glowing-accent` on Progress might be to ensure the indicator has a specific class
-// that `glowing-accent` can target or that Progress itself applies the glow.
-// For now, the `indicatorClassName` prop has been added to the `Progress` component type definition for clarity,
-// though its actual implementation depends on modifying the base `Progress` component.
-// A simpler way if `indicatorClassName` can't be added to the base component is to wrap `<Progress />` in a div and apply glow to that.
-// Let's assume `indicatorClassName` works as described.
-// NOTE: `indicatorClassName` is not a standard prop for Shadcn Progress.
-// A simpler approach would be:
-// <div className="relative">
-//   <Progress value={progressPercent} className="h-3 bg-primary/10 rounded-full" />
-//   <div className="absolute top-0 left-0 h-3 rounded-full bg-primary glowing-accent" style={{ width: `${progressPercent}%` }}></div>
-// </div>
-// However, this duplicates the bar. The best is to style the indicator. If not possible, apply glow to the whole progress bar.
-// For simplicity, the provided `indicatorClassName` assumes it will be picked up by the style.
-// If not, the glow might be less effective or apply to the whole bar.
+export default LifeXPWidget;

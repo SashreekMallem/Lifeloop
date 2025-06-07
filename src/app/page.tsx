@@ -97,7 +97,7 @@ export default function LifeOSDashboard() {
 }
 
 // Re-import WidgetCard as it's used here directly now for examples
-import type React from 'react'; // Keep type import for React type usage
+import React from 'react'; // Changed from type import
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { MoreVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
