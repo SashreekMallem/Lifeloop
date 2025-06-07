@@ -3,10 +3,14 @@
 
 import React, { useState, useEffect } from 'react';
 import WidgetCard from "./WidgetCard";
-import { Smile, BrainCircuit, Frown, Meh, Loader2, AlertTriangle } from "lucide-react"; // Added more icons
+import { Smile, BrainCircuit, Frown, Meh, Loader2, AlertTriangle } from "lucide-react";
 import { detectMood, type DetectMoodOutput, type DetectMoodInput } from '@/ai/flows/mood-detection';
 
-const MoodWidget = () => {
+interface MoodWidgetProps {
+  className?: string;
+}
+
+const MoodWidget = ({ className }: MoodWidgetProps) => {
   const [moodData, setMoodData] = useState<DetectMoodOutput | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -16,11 +20,11 @@ const MoodWidget = () => {
       setIsLoading(true);
       setError(null);
       try {
-        // Mock input data for now
+        // Use placeholder or empty inputs for the flow
         const input: DetectMoodInput = {
-          sleepData: "Slept for 6 hours, woke up twice. Sleep quality: 65%",
-          activityData: "Completed a 30-minute light workout. Total steps: 3500.",
-          calendarEvents: "Upcoming: Project deadline review. Past: Team conflict resolution meeting."
+          sleepData: "",      // Placeholder, to be replaced by real data source
+          activityData: "",   // Placeholder, to be replaced by real data source
+          calendarEvents: ""  // Placeholder, to be replaced by real data source
         };
         const result = await detectMood(input);
         setMoodData(result);
@@ -52,7 +56,7 @@ const MoodWidget = () => {
   const visuals = getMoodVisuals(moodData?.mood);
 
   return (
-    <WidgetCard title="Affective State // Sentiment Analysis" icon={<BrainCircuit />}>
+    <WidgetCard title="Affective State // Sentiment Analysis" icon={<BrainCircuit />} className={className}>
       {isLoading && (
         <div className="flex flex-col items-center justify-center h-full min-h-[150px]">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -67,7 +71,7 @@ const MoodWidget = () => {
         </div>
       )}
       {!isLoading && !error && moodData && (
-        <div className="flex flex-col items-center text-center py-2 group">
+        <div className="flex flex-col items-center text-center py-2 group h-full justify-around">
           {visuals.icon}
           <p className={`text-2xl font-bold ${visuals.color}`}>{moodData.mood || "Analysis Inconclusive"}</p>
           <p className="text-sm text-muted-foreground mt-2 px-2 max-h-[100px] overflow-y-auto scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-transparent">

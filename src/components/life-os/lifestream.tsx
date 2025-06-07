@@ -1,17 +1,20 @@
+
 'use client';
 import React from 'react';
 import { Zap, Bell, Award, MessageSquare, Lightbulb } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
+interface StreamItem {
+  id: number;
+  icon: React.ReactNode;
+  text: string;
+  time: string;
+  type: string;
+}
+
 const LifeStream = () => {
-  const streamItems = [
-    { id: 1, icon: <Award className="text-yellow-400" />, text: "Completed 'Project Alpha Presentation' - +50 Life XP!", time: "2m ago", type: "xp" },
-    { id: 2, icon: <Lightbulb className="text-secondary" />, text: "Suggestion: Try a 15-min walk to boost energy.", time: "5m ago", type: "suggestion" },
-    { id: 3, icon: <Bell className="text-primary" />, text: "Reminder: Team Sync in 10 minutes.", time: "8m ago", type: "alert" },
-    { id: 4, icon: <Zap className="text-green-400" />, text: "Energy levels seem optimal for focused work.", time: "15m ago", type: "insight" },
-    { id: 5, icon: <MessageSquare className="text-blue-400" />, text: "Mia is nearby and free for coffee. Connect?", time: "30m ago", type: "social" },
-    { id: 6, icon: <Award className="text-yellow-400" />, text: "Hit daily hydration goal - +25 Life XP!", time: "45m ago", type: "xp" },
-  ];
+  // Start with no mock stream items
+  const streamItems: StreamItem[] = [];
 
   return (
     <aside className="w-1/5 max-w-xs_ min-w-[280px] bg-sidebar/50 backdrop-blur-md flex flex-col border-l border-[hsla(var(--primary-rgb),0.1)] shadow-2xl">
@@ -21,6 +24,13 @@ const LifeStream = () => {
       </div>
       <ScrollArea className="flex-grow p-1">
         <div className="space-y-3 p-3">
+        {streamItems.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full py-10 text-center text-muted-foreground">
+            <Zap size={32} className="mb-2 opacity-30" />
+            <p className="text-sm">LifeStream is active.</p>
+            <p className="text-xs">Awaiting system events and insights.</p>
+          </div>
+        )}
         {streamItems.map(item => (
           <div key={item.id} className="flex items-start space-x-3 p-3 rounded-lg glassmorphic hover:border-primary/50 transition-all cursor-pointer">
             <div className="flex-shrink-0 mt-1 opacity-80">{item.icon}</div>

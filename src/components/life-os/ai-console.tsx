@@ -1,3 +1,4 @@
+
 'use client';
 import React from 'react';
 import { Bot, Send, Settings } from 'lucide-react';
@@ -6,20 +7,16 @@ import { Button } from '@/components/ui/button';
 import LifeOSLogo from './LifeOSLogo';
 
 const AiConsole = () => {
-  // Placeholder state and functions for AI interaction
   const [input, setInput] = React.useState('');
-  const [messages, setMessages] = React.useState([
-    { sender: 'ai', text: "Welcome to Life OS. How can I assist you today?" },
-    { sender: 'user', text: "What's on my schedule?" },
-    { sender: 'ai', text: "Thinking... You have 3 meetings and 5 tasks pending." },
-  ]);
+  // Start with no mock messages
+  const [messages, setMessages] = React.useState<{sender: string, text: string}[]>([]);
 
   const handleSend = () => {
     if (input.trim()) {
       setMessages([...messages, { sender: 'user', text: input }]);
-      // Simulate AI response
+      // Simulate AI response (to be replaced with actual Genkit flow call)
       setTimeout(() => {
-        setMessages(prev => [...prev, { sender: 'ai', text: `Okay, I'm processing: "${input}"` }]);
+        setMessages(prev => [...prev, { sender: 'ai', text: `Processing: "${input}"...` }]);
       }, 1000);
       setInput('');
     }
@@ -35,11 +32,18 @@ const AiConsole = () => {
       </div>
       
       <div className="flex-grow overflow-y-auto space-y-4 pr-2 scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-transparent">
+        {messages.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
+            <Bot size={32} className="mb-2 opacity-50" />
+            <p className="text-sm">AI Console Active.</p>
+            <p className="text-xs">Awaiting your command.</p>
+          </div>
+        )}
         {messages.map((msg, index) => (
           <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`p-3 rounded-xl max-w-[80%] text-sm leading-relaxed
               ${msg.sender === 'user' 
-                ? 'bg-primary/20 text-primary-foreground_ shadow-md' 
+                ? 'bg-primary/20 text-foreground shadow-md' // Adjusted user message for better contrast
                 : 'bg-card/80 backdrop-blur-sm border border-primary/10 text-foreground shadow-lg'
               } 
               ${msg.sender === 'ai' && 'glassmorphic'}`}>
@@ -69,7 +73,8 @@ const AiConsole = () => {
           </Button>
         </div>
         <div className="text-xs text-muted-foreground mt-2 text-center">
-          Quick Actions: [Focus Session] [Replan Day] [Dinner?]
+          {/* Quick Actions can be dynamically populated by AI later */}
+          Quick Actions: [Focus Session] [Replan Day]
         </div>
       </div>
     </aside>
