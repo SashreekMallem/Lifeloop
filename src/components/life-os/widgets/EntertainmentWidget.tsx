@@ -1,23 +1,37 @@
 import WidgetCard from "./WidgetCard";
-import { PlayCircle, Music, Film } from "lucide-react";
+import { Clapperboard, Music2,Youtube } from "lucide-react"; // Clapperboard for movies/shows
 import Image from "next/image";
 
 const EntertainmentWidget = () => {
   const suggestions = [
-    { platform: "Spotify", type: "Playlist", title: "Chill Vibes", imageHint: "abstract music" , imageUrl: "https://placehold.co/100x100.png" },
-    { platform: "Netflix", type: "Movie", title: "The Cosmic Adventure", imageHint: "space movie", imageUrl: "https://placehold.co/100x100.png" },
-    { platform: "YouTube", type: "Video", title: "Learn Coding in 10 Mins", imageHint: "code tutorial", imageUrl: "https://placehold.co/100x100.png" },
+    { platform: "Holonet Stream", type: "Series", title: "Cyberia Chronicles S3", imageHint: "cyberpunk city series", imageUrl: "https://placehold.co/150x100.png" },
+    { platform: "Neural Soundscapes", type: "Ambient Mix", title: "Zero-G Drifting", imageHint: "abstract space music", imageUrl: "https://placehold.co/150x100.png" },
+    { platform: "Data Archive", type: "Docu-Series", title: "The Quantum Leap", imageHint: "science documentary space", imageUrl: "https://placehold.co/150x100.png" },
   ];
+  
+  const platformIcons: {[key: string]: React.ReactNode } = {
+    "Holonet Stream": <Clapperboard size={16} className="text-primary/80"/>,
+    "Neural Soundscapes": <Music2 size={16} className="text-secondary/80"/>,
+    "Data Archive": <Youtube size={16} className="text-red-400/80"/>,
+  }
 
   return (
-    <WidgetCard title="Entertainment Curator" icon={<PlayCircle />}>
-      <p className="text-sm text-muted-foreground mb-3">Feeling stressed? Try these suggestions for your 30 min break.</p>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <WidgetCard title="Recreation Matrix // Content Feed" icon={<Clapperboard />}>
+      <p className="text-sm text-muted-foreground mb-3">Downtime protocol initiated. Curated media:</p>
+      <div className="grid grid-cols-1 gap-4">
         {suggestions.map((item, index) => (
-          <div key={index} className="flex flex-col items-center text-center p-2 rounded-md hover:bg-muted/50 transition-colors">
-            <Image src={item.imageUrl} alt={item.title} width={64} height={64} className="rounded-md mb-2" data-ai-hint={item.imageHint} />
-            <p className="text-xs font-medium">{item.title}</p>
-            <p className="text-xs text-muted-foreground">{item.platform} - {item.type}</p>
+          <div 
+            key={index} 
+            className="flex items-center space-x-3 p-2.5 rounded-lg glassmorphic hover:border-primary/50 transition-all cursor-pointer group"
+          >
+            <Image src={item.imageUrl} alt={item.title} width={80} height={60} className="rounded-md object-cover border border-primary/10 group-hover:border-primary/30 transition-all" data-ai-hint={item.imageHint} />
+            <div className="flex-grow">
+              <p className="text-sm font-semibold text-foreground/90 group-hover:text-primary transition-colors">{item.title}</p>
+              <div className="flex items-center text-xs text-muted-foreground mt-0.5">
+                {platformIcons[item.platform] || <Clapperboard size={14}/>}
+                <span className="ml-1.5">{item.platform} - {item.type}</span>
+              </div>
+            </div>
           </div>
         ))}
       </div>

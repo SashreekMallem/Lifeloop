@@ -4,84 +4,122 @@
 
 @layer base {
   :root {
-    --background: 0 0% 98%; /* Very Light Gray */
-    --foreground: 220 20% 10%; /* Dark Blue-Gray Text */
+    /* Jet Black / Deep Dark Blue Primary Background */
+    --background-rgb: 10 12 24; /* Jet Black / Deep Dark Blue */
+    --background-start-rgb: 10, 12, 24;
+    --background-end-rgb: 18, 20, 38; /* Slightly lighter Deep Blue for gradient */
+    --background: hsl(var(--background-rgb));
 
-    --card: 0 0% 100%; /* White */
-    --card-foreground: 220 20% 10%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 220 20% 10%;
+    /* Foreground Text - Soft Cyan/White */
+    --foreground-rgb: 200 220 255;
+    --foreground: hsl(var(--foreground-rgb));
 
-    --primary: 262 80% 60%; /* Vibrant Violet */
-    --primary-foreground: 0 0% 100%; /* White */
+    /* Cards & Popovers (Glassmorphism Base) */
+    --card-rgb: 30 40 70; /* Deep Blue, semi-transparent base for glass */
+    --card-foreground-rgb: 200 220 255;
+    --card: hsla(var(--card-rgb), 0.1); /* Base for glassmorphism with low opacity */
+    --card-foreground: hsl(var(--card-foreground-rgb));
 
-    --secondary: 262 70% 94%; /* Light Violet */
-    --secondary-foreground: 262 80% 30%; /* Darker Violet for text */
+    --popover-rgb: 40 50 80;
+    --popover-foreground-rgb: 200 220 255;
+    --popover: hsla(var(--popover-rgb), 0.7); /* More opaque for readability */
+    --popover-foreground: hsl(var(--popover-foreground-rgb));
 
-    --muted: 0 0% 94%; /* Light Muted Gray */
-    --muted-foreground: 220 10% 45%; /* Darker Muted Text */
+    /* Primary Accent - Neon Cyan */
+    --primary-rgb: 0 255 255; /* Neon Cyan */
+    --primary-foreground-rgb: 10 20 40; /* Dark for contrast on neon */
+    --primary: hsl(var(--primary-rgb));
+    --primary-foreground: hsl(var(--primary-foreground-rgb));
 
-    --accent: 210 90% 55%; /* Bright Sky Blue */
-    --accent-foreground: 0 0% 100%; /* White */
+    /* Secondary Accent - Electric Indigo */
+    --secondary-rgb: 94 0 255; /* Electric Indigo */
+    --secondary-foreground-rgb: 230 240 255; /* Light for contrast */
+    --secondary: hsl(var(--secondary-rgb));
+    --secondary-foreground: hsl(var(--secondary-foreground-rgb));
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
+    /* Muted - Subtle Blues/Grays for less emphasis */
+    --muted-rgb: 50 60 90;
+    --muted-foreground-rgb: 150 170 200;
+    --muted: hsl(var(--muted-rgb));
+    --muted-foreground: hsl(var(--muted-foreground-rgb));
 
-    --border: 0 0% 90%; /* Light Gray Border */
-    --input: 0 0% 88%;
-    --ring: 210 90% 55%; /* Accent color for rings */
-    --radius: 0.75rem; /* Increased radius */
+    /* Accent - Re-purpose for general highlights or keep Neon Cyan */
+    --accent-rgb: 0 255 255; /* Neon Cyan */
+    --accent-foreground-rgb: 10 20 40;
+    --accent: hsl(var(--accent-rgb));
+    --accent-foreground: hsl(var(--accent-foreground-rgb));
 
-    /* Sidebar specific colors for light theme */
-    --sidebar-background: 0 0% 96%; 
-    --sidebar-foreground: 220 20% 15%; 
-    --sidebar-primary: 262 80% 60%; 
-    --sidebar-primary-foreground: 0 0% 100%; 
-    --sidebar-accent: 262 70% 92%; 
-    --sidebar-accent-foreground: 262 80% 40%;
-    --sidebar-border: 0 0% 88%;
-    --sidebar-ring: 210 90% 55%;
+    --destructive-rgb: 255 50 100;
+    --destructive-foreground-rgb: 255 255 255;
+    --destructive: hsl(var(--destructive-rgb));
+    --destructive-foreground: hsl(var(--destructive-foreground-rgb));
+
+    /* Borders - Subtle Neon Glow or Defined Lines */
+    --border-rgb: 0 255 255; /* Neon Cyan for glowing borders */
+    --border-opacity: 0.3;
+    --border: hsla(var(--border-rgb), var(--border-opacity)); /* Semi-transparent neon */
+    
+    --input-rgb: 40 50 80; /* Similar to popover for consistency */
+    --input-border-rgb: 0 255 255;
+    --input: hsla(var(--input-rgb), 0.5);
+    --ring-rgb: 0 255 255; /* Neon Cyan for focus rings */
+    --ring: hsl(var(--ring-rgb));
+
+    --radius: 0.75rem;
+
+    /* Specific component theming if needed */
+    --sidebar-background-rgb: 15 18 30; /* Slightly different dark for sidebar */
+    --sidebar-background: hsl(var(--sidebar-background-rgb));
+    --sidebar-foreground: hsl(var(--foreground-rgb));
+    --sidebar-border: hsla(var(--primary-rgb), 0.2); /* Subtle Neon Cyan border */
+
+    /* AI Orb */
+    --ai-orb-bg-rgb: 0 255 255; /* Neon Cyan */
+    --ai-orb-glow-rgb: 0 255 255;
   }
 
-  .dark {
-    --background: 220 25% 10%; /* Very Dark Desaturated Blue */
-    --foreground: 190 80% 90%; /* Light Cyan/Off-White */
+  /* Light theme remains for completeness, but primary focus is dark */
+  .light {
+    --background-rgb: 240 240 245;
+    --foreground-rgb: 10 10 20;
 
-    --card: 220 25% 14%; /* Slightly Lighter Dark Blue/Gray */
-    --card-foreground: 190 80% 90%;
+    --card-rgb: 255 255 255;
+    --card: hsla(var(--card-rgb), 0.8);
+    --card-foreground-rgb: 10 10 20;
 
-    --popover: 220 25% 12%; /* Dark Popover */
-    --popover-foreground: 190 80% 90%;
+    --popover-rgb: 255 255 255;
+    --popover: hsla(var(--popover-rgb), 0.95);
+    --popover-foreground-rgb: 10 10 20;
 
-    --primary: 190 90% 55%; /* Vibrant Cyan/Electric Blue */
-    --primary-foreground: 220 20% 5%; /* Dark text for contrast on bright primary */
+    --primary-rgb: 94 0 255; /* Electric Indigo */
+    --primary-foreground-rgb: 255 255 255;
 
-    --secondary: 220 20% 25%; /* Muted Darker Blue/Gray */
-    --secondary-foreground: 190 60% 75%; /* Lighter text on secondary */
-
-    --muted: 220 15% 20%; /* Subtle Dark Gray for dividers/borders */
-    --muted-foreground: 190 50% 65%; /* Less prominent light gray */
-
-    --accent: 180 90% 50%; /* Bright Teal/Cyan */
-    --accent-foreground: 220 20% 5%; /* Dark text for contrast */
-
-    --destructive: 0 70% 55%; /* Vivid Red for dark mode */
-    --destructive-foreground: 0 0% 98%;
-
-    --border: 220 20% 28%; /* Dark Border */
-    --input: 220 20% 18%; /* Dark Input Background */
-    --ring: 190 90% 55%; /* Primary color for rings */
+    --secondary-rgb: 0 180 200; /* Softer Cyan */
+    --secondary-foreground-rgb: 10 10 20;
     
-    /* Sidebar specific colors for dark theme */
-    --sidebar-background: 220 25% 8%; 
-    --sidebar-foreground: 190 70% 85%; 
-    --sidebar-primary: 190 90% 55%;
-    --sidebar-primary-foreground: 220 20% 5%;
-    --sidebar-accent: 220 25% 18%; 
-    --sidebar-accent-foreground: 190 90% 65%;
-    --sidebar-border: 220 20% 20%;
-    --sidebar-ring: 190 90% 55%;
+    --muted-rgb: 230 230 235;
+    --muted-foreground-rgb: 100 100 110;
+
+    --accent-rgb: 94 0 255; /* Electric Indigo */
+    --accent-foreground-rgb: 255 255 255;
+    
+    --border-rgb: 94 0 255;
+    --border-opacity: 0.2;
+    --border: hsla(var(--border-rgb), var(--border-opacity));
+
+    --input-rgb: 255 255 255;
+    --input-border-rgb: 150 150 160;
+    --input: hsl(var(--input-rgb));
+    --ring-rgb: 94 0 255;
+
+    --sidebar-background-rgb: 245 245 250;
+    --sidebar-background: hsl(var(--sidebar-background-rgb));
+    --sidebar-foreground: hsl(var(--foreground-rgb));
+    --sidebar-border: hsla(var(--primary-rgb), 0.1);
+
+    --ai-orb-bg-rgb: 94 0 255; /* Electric Indigo */
+    --ai-orb-glow-rgb: 94 0 255;
   }
 }
 
@@ -91,7 +129,42 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: 'PT Sans', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-headline;
+  }
+}
+
+/* Utility for glassmorphism effect */
+.glassmorphic {
+  background-color: hsla(var(--card-rgb), 0.15); /* Base for glassmorphism with low opacity */
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px); /* Safari */
+  border: 1px solid hsla(var(--primary-rgb), 0.1); /* Subtle neon border */
+  box-shadow: 0 0 20px hsla(var(--primary-rgb), 0.1), 0 0 40px hsla(var(--secondary-rgb), 0.05); /* Soft outer glow */
+}
+
+/* Utility for neon text */
+.neon-text-primary {
+  color: hsl(var(--primary-rgb));
+  text-shadow:
+    0 0 5px hsla(var(--primary-rgb), 0.8),
+    0 0 10px hsla(var(--primary-rgb), 0.6),
+    0 0 15px hsla(var(--primary-rgb), 0.4);
+}
+.neon-text-secondary {
+  color: hsl(var(--secondary-rgb));
+  text-shadow:
+    0 0 5px hsla(var(--secondary-rgb), 0.8),
+    0 0 10px hsla(var(--secondary-rgb), 0.6),
+    0 0 15px hsla(var(--secondary-rgb), 0.4);
+}
+
+/* Glowing effect for progress bars or active elements */
+.glowing-accent {
+  box-shadow: 0 0 8px hsl(var(--primary-rgb)), 0 0 12px hsl(var(--primary-rgb)), 0 0 16px hsl(var(--primary-rgb));
 }
