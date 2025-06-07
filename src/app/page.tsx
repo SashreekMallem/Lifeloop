@@ -1,3 +1,4 @@
+
 import AppHeader from "@/components/life-os/AppHeader";
 import TasksWidget from "@/components/life-os/widgets/TasksWidget";
 import MeetingsWidget from "@/components/life-os/widgets/MeetingsWidget";
@@ -8,7 +9,8 @@ import IntelligentSuggestionsWidget from "@/components/life-os/widgets/Intellige
 import EntertainmentWidget from "@/components/life-os/widgets/EntertainmentWidget";
 import MorningSummaryWidget from "@/components/life-os/widgets/MorningSummaryWidget";
 import MoodWidget from "@/components/life-os/widgets/MoodWidget";
-import { Droplets, Zap, Brain, CalendarDays, CheckSquare, Film, TrendingUp, Lightbulb, Coffee } from "lucide-react";
+import WeatherWidget from "@/components/life-os/widgets/WeatherWidget"; // Import the new WeatherWidget
+import { Droplets, Zap, Brain } from "lucide-react";
 
 export default function LifeOSDashboard() {
   return (
@@ -45,15 +47,18 @@ export default function LifeOSDashboard() {
           <div className="md:col-span-6 lg:col-span-4">
             <MeetingsWidget />
           </div>
-          <div className="md:col-span-12 lg:col-span-4"> {/* Mood widget takes full width on small, 1/3 on large */}
-            <MoodWidget />
+          <div className="md:col-span-6 lg:col-span-4"> {/* Weather widget added here */}
+            <WeatherWidget className="min-h-[280px]"/>
           </div>
           
           {/* Standard Widgets Row 2 */}
-          <div className="md:col-span-6 lg:col-span-6">
+          <div className="md:col-span-6 lg:col-span-4"> {/* Mood widget takes more space now */}
+            <MoodWidget className="min-h-[200px]"/>
+          </div>
+          <div className="md:col-span-6 lg:col-span-4">
             <HealthDataWidget />
           </div>
-          <div className="md:col-span-6 lg:col-span-6">
+          <div className="md:col-span-6 lg:col-span-4">
             <EntertainmentWidget />
           </div>
 
@@ -97,7 +102,7 @@ export default function LifeOSDashboard() {
 }
 
 // Re-import WidgetCard as it's used here directly now for examples
-import React from 'react'; // Changed from type import
+import React from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { MoreVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -107,7 +112,7 @@ interface WidgetCardProps {
   icon?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
-  contentClassName?: string; // Added for more control over content area
+  contentClassName?: string;
 }
 
 const WidgetCard: React.FC<WidgetCardProps> = ({ title, icon, children, className, contentClassName }) => {
