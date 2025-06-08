@@ -11,3 +11,4 @@ import '@/ai/flows/mood-detection.ts';
 import '@/ai/flows/weather-forecast-flow.ts';
 import '@/ai/flows/calendar-events-flow.ts'; // Includes get, add, edit, delete
 import '@/ai/flows/chat-flow.ts';
+import '@/ai/flows/health-data-flow.ts'; // Added new health data flow
