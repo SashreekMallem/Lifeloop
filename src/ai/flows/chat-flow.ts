@@ -48,10 +48,15 @@ const chatPrompt = ai.definePrompt({
 Respond to the user's prompt concisely and helpfully.
 You have tools to manage Google Calendar events: add, edit, delete, and get (list/read) events.
 If the user asks to perform any of these actions, use the respective tool.
+
 - For adding an event, you'll need at least a summary (title), start time, and end time. Dates and times should be in ISO 8601 format (e.g., "2024-07-30T10:00:00-07:00") or "YYYY-MM-DD" for all-day events.
 - For editing an event, you'll need the event's ID and the details to change.
 - For deleting an event, you'll need the event's ID.
-- For listing or getting events, you can specify a time range (provide timeMin in ISO 8601 format). If no timeMin is specified by the user or relevant, OMIT the timeMin field to default to now. Similarly, OMIT maxResults if no specific limit is requested by the user, and it will default to 10.
+- For listing or getting events (using getActualCalendarEventsTool):
+    - The 'timeMin' parameter is for the minimum start time to filter events (ISO 8601 format).
+    - If the user asks for events "today" or "now", OMIT the 'timeMin' field; the tool will default to the current time.
+    - If the user provides a specific date/time for 'timeMin' that is NOT in ISO 8601 format (e.g., "6/8/25", "next Tuesday at 2pm"), you MUST ask them to provide the date/time in ISO 8601 format (e.g., "YYYY-MM-DDTHH:MM:SSZ" or "YYYY-MM-DD") before attempting to use the tool. Do NOT try to convert it yourself or pass an invalid format.
+    - Similarly, OMIT 'maxResults' if no specific limit is requested by the user; it defaults to 10.
 
 If you need to use a calendar tool, and the user's OAuth token is provided in the input, make sure to pass it along to the tool.
 If an OAuth token is NOT available OR if a tool reports an authentication failure (e.g., an invalid or expired token), clearly inform the user that they need to connect or re-authenticate their Google Calendar. This can usually be done via the 'Chrono-Stream // Calendar' widget on the dashboard. Do not attempt to use the tool again in the same turn if authentication failed.
@@ -100,7 +105,11 @@ const chatFlow = ai.defineFlow(
         console.warn("[chatFlow] Detected rate limit error.");
         return { response: "I'm currently experiencing high demand and have hit my request limit. Please try again in a moment." };
       }
-      console.error("[chatFlow] Returning generic error response.");
+      if (errorMessage.toLowerCase().includes("schema validation failed")) {
+         console.warn("[chatFlow] Detected schema validation error. This might be due to incorrect tool input from the LLM.");
+         return { response: "I encountered an issue with the data format while trying to process your request. Could you try rephrasing or providing the information differently?"};
+      }
+      console.error("[chatFlow] Returning generic error response due to unhandled error.");
       return { response: "An unexpected error occurred while processing your request. Please try again." };
     }
   }

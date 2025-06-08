@@ -182,7 +182,12 @@ export const getActualCalendarEventsTool = ai.defineTool(
 
 const getCalendarEventsFlow = ai.defineFlow(
   { name: 'getCalendarEventsFlow', inputSchema: GetCalendarEventsInputSchema, outputSchema: GetCalendarEventsOutputSchema },
-  async (input) => getActualCalendarEventsTool(input)
+  async (input) => {
+    console.log("[getCalendarEventsFlow] Flow called with input:", JSON.stringify(input));
+    const result = await getActualCalendarEventsTool(input);
+    console.log("[getCalendarEventsFlow] Result from tool:", JSON.stringify(result));
+    return result;
+  }
 );
 export async function getCalendarEvents(input: GetCalendarEventsInput): Promise<GetCalendarEventsOutput> {
   return getCalendarEventsFlow(input);
@@ -269,7 +274,12 @@ export const addCalendarEventTool = ai.defineTool(
 );
 const addCalendarEventFlow = ai.defineFlow(
   { name: 'addCalendarEventFlow', inputSchema: AddCalendarEventInputSchema, outputSchema: CalendarActionStatusSchema },
-  async (input) => addCalendarEventTool(input)
+  async (input) => {
+    console.log("[addCalendarEventFlow] Flow called with input:", JSON.stringify(input));
+    const result = await addCalendarEventTool(input);
+    console.log("[addCalendarEventFlow] Result from tool:", JSON.stringify(result));
+    return result;
+  }
 );
 export async function addCalendarEvent(input: AddCalendarEventInput): Promise<CalendarActionStatus> {
   return addCalendarEventFlow(input);
@@ -362,7 +372,12 @@ export const editCalendarEventTool = ai.defineTool(
 );
 const editCalendarEventFlow = ai.defineFlow(
   { name: 'editCalendarEventFlow', inputSchema: EditCalendarEventInputSchema, outputSchema: CalendarActionStatusSchema },
-  async (input) => editCalendarEventTool(input)
+  async (input) => {
+    console.log("[editCalendarEventFlow] Flow called with input:", JSON.stringify(input));
+    const result = await editCalendarEventTool(input);
+    console.log("[editCalendarEventFlow] Result from tool:", JSON.stringify(result));
+    return result;
+  }
 );
 export async function editCalendarEvent(input: EditCalendarEventInput): Promise<CalendarActionStatus> {
   return editCalendarEventFlow(input);
@@ -414,7 +429,12 @@ export const deleteCalendarEventTool = ai.defineTool(
 );
 const deleteCalendarEventFlow = ai.defineFlow(
   { name: 'deleteCalendarEventFlow', inputSchema: DeleteCalendarEventInputSchema, outputSchema: CalendarActionStatusSchema },
-  async (input) => deleteCalendarEventTool(input)
+  async (input) => {
+    console.log("[deleteCalendarEventFlow] Flow called with input:", JSON.stringify(input));
+    const result = await deleteCalendarEventTool(input);
+    console.log("[deleteCalendarEventFlow] Result from tool:", JSON.stringify(result));
+    return result;
+  }
 );
 export async function deleteCalendarEvent(input: DeleteCalendarEventInput): Promise<CalendarActionStatus> {
   return deleteCalendarEventFlow(input);
