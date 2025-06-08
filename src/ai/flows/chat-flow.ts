@@ -16,7 +16,7 @@ import {
   editCalendarEventTool, 
   deleteCalendarEventTool,
   getActualCalendarEventsTool 
-} from './calendar-events-flow'; 
+} from '@/ai/tools/calendar-tools'; // <<<< UPDATED IMPORT PATH
 
 const ChatInputSchema = z.object({
   prompt: z.string().describe('The user\'s input message or question.'),
@@ -44,8 +44,8 @@ const chatPrompt = ai.definePrompt({
     deleteCalendarEventTool,
     getActualCalendarEventsTool 
   ],
-  config: { // Added safety settings for debugging
-    safetySettings: [
+  config: { 
+    safetySettings: [ // Permissive safety settings for debugging
       { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
       { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
       { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
@@ -118,8 +118,6 @@ const chatFlow = ai.defineFlow(
       
       if (!output || typeof output.response !== 'string') {
         console.error("[chatFlow] Chat prompt returned malformed output or missing response field. Output was:", JSON.stringify(output));
-        // This case should ideally not be hit if the LLM adheres to the prompt and chatPrompt itself doesn't return null.
-        // If chatPrompt returns null (leading to the GenkitError caught below), this 'if' won't execute.
         return { response: "I'm sorry, I couldn't generate a valid response structure at this moment. Please try rephrasing your request." };
       }
       console.log("[chatFlow] Successfully processed chatPrompt. Returning response:", output.response);
@@ -148,4 +146,3 @@ const chatFlow = ai.defineFlow(
     }
   }
 );
-

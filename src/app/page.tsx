@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import WeatherWidget from "@/components/life-os/widgets/WeatherWidget";
 import CalendarWidget from "@/components/life-os/widgets/CalendarWidget"; // Import CalendarWidget
+import HealthDataWidget from "@/components/life-os/widgets/HealthDataWidget"; // Import HealthDataWidget
 
 const bootSequenceLines = [
   { id: 1, text: "Booting AI Core..." },
@@ -70,6 +71,7 @@ export default function LifeOSDashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <WeatherWidget className="md:col-span-1 lg:col-span-1 min-h-[280px]" defaultLocation="London, UK" />
             <CalendarWidget className="md:col-span-1 lg:col-span-1 min-h-[300px]" />
+            <HealthDataWidget className="md:col-span-1 lg:col-span-1 min-h-[300px]" />
             
             {/* Placeholder for other widgets/modules as they are re-integrated */}
             {/* Example:

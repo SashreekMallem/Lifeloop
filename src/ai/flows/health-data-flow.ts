@@ -12,13 +12,13 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 
-// Input Schema for the main flow
-export const HealthSummaryInputSchema = z.object({
+// Input Schema for the main flow - NOT EXPORTED
+const HealthSummaryInputSchema = z.object({
   oauthToken: z.string().describe('The OAuth access token for Google Fit API.'),
 });
 export type HealthSummaryInput = z.infer<typeof HealthSummaryInputSchema>;
 
-// Output Schema for the main flow
+// Output Schema for the main flow - NOT EXPORTED
 const HealthSummarySuccessSchema = z.object({
   status: z.literal("success"),
   steps: z.number().optional().describe("Today's step count."),
@@ -36,7 +36,7 @@ const HealthSummaryErrorSchema = z.object({
     errorMessage: z.string().describe("Message describing the error."),
 });
 
-export const HealthSummaryOutputSchema = z.discriminatedUnion("status", [
+const HealthSummaryOutputSchema = z.discriminatedUnion("status", [
     HealthSummarySuccessSchema,
     HealthSummaryAuthErrorSchema,
     HealthSummaryErrorSchema
@@ -219,16 +219,11 @@ const getHealthSummaryFlow = ai.defineFlow(
         sleepError = (sleepResult.reason as Error).message || "Error fetching sleep data.";
       }
       
-      // If a specific error indicates auth failure, prioritize that message
       const combinedErrorMessage = [stepsError, sleepError].filter(Boolean).join('; ');
       if (combinedErrorMessage.includes("401") || combinedErrorMessage.includes("403") || combinedErrorMessage.toLowerCase().includes("invalid credentials")) {
         return { status: "requires_authentication", message: "Google Fit authentication failed or token expired. Please re-authenticate." };
       }
       if (stepsError || sleepError) {
-        // Return success but with potentially missing fields if only one tool failed, or an error if both critical.
-        // For simplicity, if any tool has an error not auth-related, we'll reflect it as a general error for now.
-        // A more granular approach might return partial success.
-        // If we want to be strict and say any tool failure is a flow failure:
         return { status: "error", errorMessage: `Failed to retrieve some health data: ${combinedErrorMessage}` };
       }
 
