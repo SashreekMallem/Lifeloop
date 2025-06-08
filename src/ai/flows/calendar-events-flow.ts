@@ -8,6 +8,10 @@
  * - addCalendarEvent - Adds a new calendar event.
  * - editCalendarEvent - Edits an existing calendar event.
  * - deleteCalendarEvent - Deletes a calendar event.
+ * - getActualCalendarEventsTool - Tool to fetch events (for AI use).
+ * - addCalendarEventTool - Tool to add events (for AI use).
+ * - editCalendarEventTool - Tool to edit events (for AI use).
+ * - deleteCalendarEventTool - Tool to delete events (for AI use).
  */
 
 import {ai} from '@/ai/genkit';
@@ -56,7 +60,7 @@ export type CalendarActionStatus = z.infer<typeof CalendarActionStatusSchema>;
 // 1. Get Calendar Events
 // ========================
 const GetCalendarEventsInputSchema = BaseEventInputSchema.extend({
-   userId: z.string().optional().describe('The ID of the user (for logging/context).'), // Retained for potential logging
+   userId: z.string().optional().describe('The ID of the user (for logging/context).'), 
    timeMin: z.string().datetime().optional().describe("The minimum start time for events to filter by (ISO 8601 format). Defaults to now if not provided."),
    maxResults: z.number().optional().default(10).describe("Maximum number of events to return."),
 });
@@ -78,7 +82,7 @@ const GetCalendarEventsOutputSchema = z.discriminatedUnion("status", [
 ]);
 export type GetCalendarEventsOutput = z.infer<typeof GetCalendarEventsOutputSchema>;
 
-const getActualCalendarEventsTool = ai.defineTool(
+export const getActualCalendarEventsTool = ai.defineTool(
   {
     name: 'getActualCalendarEventsTool',
     description: 'Fetches actual calendar events for a user from Google Calendar API using an OAuth token.',
