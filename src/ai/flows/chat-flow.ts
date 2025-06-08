@@ -30,6 +30,7 @@ const ChatOutputSchema = z.object({
 export type ChatOutput = z.infer<typeof ChatOutputSchema>;
 
 export async function chatWithAI(input: ChatInput): Promise<ChatOutput> {
+  console.log("[chatWithAI] Flow started with input:", JSON.stringify(input));
   return chatFlow(input);
 }
 
@@ -50,7 +51,7 @@ If the user asks to perform any of these actions, use the respective tool.
 - For adding an event, you'll need at least a summary (title), start time, and end time. Dates and times should be in ISO 8601 format (e.g., "2024-07-30T10:00:00-07:00") or "YYYY-MM-DD" for all-day events.
 - For editing an event, you'll need the event's ID and the details to change.
 - For deleting an event, you'll need the event's ID.
-- For listing or getting events, you can specify a time range (provide timeMin in ISO 8601 format) or ask for upcoming events (in which case, OMIT the timeMin field to default to now). Similarly, OMIT maxResults if no specific limit is requested by the user, and it will default to 10.
+- For listing or getting events, you can specify a time range (provide timeMin in ISO 8601 format). If no timeMin is specified by the user or relevant, OMIT the timeMin field to default to now. Similarly, OMIT maxResults if no specific limit is requested by the user, and it will default to 10.
 
 If you need to use a calendar tool, and the user's OAuth token is provided in the input, make sure to pass it along to the tool.
 If an OAuth token is NOT available OR if a tool reports an authentication failure (e.g., an invalid or expired token), clearly inform the user that they need to connect or re-authenticate their Google Calendar. This can usually be done via the 'Chrono-Stream // Calendar' widget on the dashboard. Do not attempt to use the tool again in the same turn if authentication failed.
@@ -77,22 +78,29 @@ const chatFlow = ai.defineFlow(
     outputSchema: ChatOutputSchema,
   },
   async (input) => {
+    console.log("[chatFlow] Executing with input:", JSON.stringify(input));
     try {
+      console.log("[chatFlow] Calling chatPrompt...");
       const {output} = await chatPrompt(input); 
+      console.log("[chatFlow] Received output from chatPrompt:", JSON.stringify(output));
       
       if (!output || typeof output.response !== 'string') {
-        console.error("[chatFlow] Chat prompt returned malformed output or missing response field:", output);
+        console.error("[chatFlow] Chat prompt returned malformed output or missing response field. Output was:", JSON.stringify(output));
         return { response: "I'm sorry, I couldn't generate a valid response structure at this moment. Please try rephrasing your request." };
       }
+      console.log("[chatFlow] Successfully processed chatPrompt. Returning response:", output.response);
       return { response: output.response }; 
 
     } catch (error: any) {
-      console.error("[chatFlow] Error during chatPrompt execution:", error);
+      console.error("[chatFlow] Error during chatPrompt execution. Full error object:", error);
       const errorMessage = error.message || error.toString() || "Unknown error";
+      console.error("[chatFlow] Extracted error message:", errorMessage);
 
       if (errorMessage.includes("429") || errorMessage.toLowerCase().includes("too many requests") || errorMessage.toLowerCase().includes("quota")) {
+        console.warn("[chatFlow] Detected rate limit error.");
         return { response: "I'm currently experiencing high demand and have hit my request limit. Please try again in a moment." };
       }
+      console.error("[chatFlow] Returning generic error response.");
       return { response: "An unexpected error occurred while processing your request. Please try again." };
     }
   }
