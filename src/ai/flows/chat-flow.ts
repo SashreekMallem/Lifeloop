@@ -15,7 +15,7 @@ import {
   addCalendarEventTool, 
   editCalendarEventTool, 
   deleteCalendarEventTool,
-  getActualCalendarEventsTool
+  getActualCalendarEventsTool 
 } from './calendar-events-flow'; 
 
 const ChatInputSchema = z.object({
@@ -44,6 +44,14 @@ const chatPrompt = ai.definePrompt({
     deleteCalendarEventTool,
     getActualCalendarEventsTool 
   ],
+  config: { // Added safety settings for debugging
+    safetySettings: [
+      { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+      { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+    ],
+  },
   system: `You are a helpful AI assistant integrated into a Life OS.
 You have tools to manage Google Calendar events: add, edit, delete, and get (list/read) events.
 
@@ -126,7 +134,7 @@ const chatFlow = ai.defineFlow(
         console.warn("[chatFlow] Detected rate limit error.");
         return { response: "I'm currently experiencing high demand and have hit my request limit. Please try again in a moment." };
       }
-      // Check if the error message indicates schema validation failure and the provided data was null
+      
       if (errorMessage.toLowerCase().includes("schema validation failed") && errorMessage.toLowerCase().includes("provided data:\n\nnull")) {
          console.warn("[chatFlow] Detected schema validation error: chatPrompt likely resolved to null because the LLM's output did not conform to ChatOutputSchema. This often means the LLM failed to produce the required JSON { \"response\": \"...\" }.");
          return { response: "I had trouble formatting my thoughts correctly. Could you try rephrasing your request or asking in a different way?"};
