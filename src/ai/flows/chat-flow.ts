@@ -53,10 +53,10 @@ If the user asks to perform any of these actions, use the respective tool.
 - For editing an event, you'll need the event's ID and the details to change.
 - For deleting an event, you'll need the event's ID.
 - For listing or getting events (using getActualCalendarEventsTool):
-    - The 'timeMin' parameter is for the minimum start time to filter events (ISO 8601 format).
-    - If the user asks for events "today" or "now", OMIT the 'timeMin' field; the tool will default to the current time.
-    - If the user provides a specific date/time for 'timeMin' that is NOT in ISO 8601 format (e.g., "6/8/25", "next Tuesday at 2pm"), you MUST ask them to provide the date/time in ISO 8601 format (e.g., "YYYY-MM-DDTHH:MM:SSZ" or "YYYY-MM-DD") before attempting to use the tool. Do NOT try to convert it yourself or pass an invalid format.
-    - Similarly, OMIT 'maxResults' if no specific limit is requested by the user; it defaults to 10.
+    - If the user asks for their schedule generally (e.g., "my schedule?", "what's on my calendar?", "show my events", "what do I have today?", "my events for today"), assume they mean for the current day and upcoming events. In this case, you MUST OMIT the 'timeMin' field when calling the tool; the tool will default to the current time. Do NOT pass an empty object or a self-generated date for 'timeMin'.
+    - If the user provides a specific date or time range for when to list events that is NOT in a valid ISO 8601 format (e.g., "June 8th 2025", "next Tuesday at 2pm", "events for tomorrow morning"), you MUST politely ask them to provide the relevant date/time in a standard ISO 8601 format (e.g., "YYYY-MM-DDTHH:MM:SSZ" for a specific time, or "YYYY-MM-DD" to see events starting on that day). For example, say: "To look up events for that date, could you please provide it in YYYY-MM-DD format? Or for a specific time, YYYY-MM-DDTHH:MM:SSZ." Do NOT try to convert it yourself or pass an invalid format to the tool.
+    - If the user *does* provide a valid ISO 8601 date/time string for filtering, pass it as the 'timeMin' parameter to the tool.
+    - OMIT 'maxResults' if no specific limit is requested by the user; it defaults to 10.
 
 If you need to use a calendar tool, and the user's OAuth token is provided in the input, make sure to pass it along to the tool.
 If an OAuth token is NOT available OR if a tool reports an authentication failure (e.g., an invalid or expired token), clearly inform the user that they need to connect or re-authenticate their Google Calendar. This can usually be done via the 'Chrono-Stream // Calendar' widget on the dashboard. Do not attempt to use the tool again in the same turn if authentication failed.
@@ -86,11 +86,15 @@ const chatFlow = ai.defineFlow(
     console.log("[chatFlow] Executing with input:", JSON.stringify(input));
     try {
       console.log("[chatFlow] Calling chatPrompt...");
+      // The prompt guides the LLM to use this token when calling tools.
+      // The tools themselves (addCalendarEventTool etc.) are defined to accept oauthToken in their input schema.
       const {output} = await chatPrompt(input); 
-      console.log("[chatFlow] Received output from chatPrompt:", JSON.stringify(output));
+      
+      console.log("[chatFlow] Received output from chatPrompt (raw):", JSON.stringify(output));
       
       if (!output || typeof output.response !== 'string') {
         console.error("[chatFlow] Chat prompt returned malformed output or missing response field. Output was:", JSON.stringify(output));
+        // Fallback for malformed output from the prompt itself
         return { response: "I'm sorry, I couldn't generate a valid response structure at this moment. Please try rephrasing your request." };
       }
       console.log("[chatFlow] Successfully processed chatPrompt. Returning response:", output.response);
@@ -107,6 +111,7 @@ const chatFlow = ai.defineFlow(
       }
       if (errorMessage.toLowerCase().includes("schema validation failed")) {
          console.warn("[chatFlow] Detected schema validation error. This might be due to incorrect tool input from the LLM.");
+         // Provide more context to the user if it's a schema validation issue.
          return { response: "I encountered an issue with the data format while trying to process your request. Could you try rephrasing or providing the information differently?"};
       }
       console.error("[chatFlow] Returning generic error response due to unhandled error.");
@@ -114,3 +119,4 @@ const chatFlow = ai.defineFlow(
     }
   }
 );
+
