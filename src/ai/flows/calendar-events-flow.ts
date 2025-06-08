@@ -49,24 +49,25 @@ const getCalendarEventsTool = ai.defineTool(
     outputSchema: GetCalendarEventsOutputSchema,
   },
   async (input) => {
-    // Simulate needing authentication if no userId is provided
-    if (!input.userId) {
+    // Simulate needing authentication if no userId is explicitly provided (is undefined)
+    if (input.userId === undefined) {
+      console.log('Calendar Tool: userId is undefined, returning requires_authentication.');
       return {
         status: "requires_authentication",
         message: "User not authenticated. Please connect your Google Calendar.",
       };
     }
 
-    // Simulate successful data fetch for an "authenticated" user
-    // In a real scenario, here you would use input.oauthToken to call Google Calendar API
-    // For now, return mock events if a userId is present
-    console.log(`Simulating event fetch for userId: ${input.userId}`);
+    // If userId is present (even if an empty string, though not expected for a real UID),
+    // treat it as an attempt to fetch for an authenticated user.
+    console.log(`Calendar Tool: Simulating event fetch for userId: '${input.userId}' (UID length: ${input.userId?.length}).`);
     return {
       status: "success",
       events: [
-        { summary: "Team Sync - Project Nebula", start: new Date(Date.now() + 1*60*60*1000).toISOString(), end: new Date(Date.now() + 1.5*60*60*1000).toISOString() },
+        { summary: `Project Meeting for ${input.userId ? 'User ' + input.userId.substring(0,5) : 'Unknown User'}`, start: new Date(Date.now() + 1*60*60*1000).toISOString(), end: new Date(Date.now() + 1.5*60*60*1000).toISOString() },
         { summary: "Client Demo - Axiom Corp", start: new Date(Date.now() + 3*60*60*1000).toISOString(), end: new Date(Date.now() + 4*60*60*1000).toISOString() },
         { summary: "R&D Strategy Session", start: new Date(Date.now() + 1*24*60*60*1000 + 2*60*60*1000).toISOString(), end: new Date(Date.now() + 1*24*60*60*1000 + 2.75*60*60*1000).toISOString() },
+        { summary: "LifeOS Sync", start: new Date(Date.now() + 2*24*60*60*1000 + 4*60*60*1000).toISOString(), end: new Date(Date.now() + 2*24*60*60*1000 + 5*60*60*1000).toISOString() },
       ],
     };
   }
@@ -98,17 +99,9 @@ const calendarEventsFlow = ai.defineFlow(
   },
   async (input) => {
     try {
-      // Directly call the tool as the prompt is just a passthrough instruction for this case
+      // Directly call the tool
       const toolOutput = await getCalendarEventsTool(input);
       return toolOutput;
-
-      // LLM call might be useful if we wanted it to summarize or interpret events,
-      // but for now, direct tool call is more efficient.
-      // const { output } = await calendarEventsPrompt(input);
-      // if (!output) {
-      //   throw new Error('No output from calendarEventsPrompt');
-      // }
-      // return output;
     } catch (error: any) {
       console.error("Error in calendarEventsFlow:", error);
       return {

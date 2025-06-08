@@ -77,6 +77,8 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
     provider.addScope('https://www.googleapis.com/auth/calendar.readonly');
     provider.addScope('https://www.googleapis.com/auth/calendar.events.readonly');
     try {
+      console.log("Firebase app:", app);
+      console.log("Firebase auth:", auth);
       await signInWithPopup(auth, provider);
       // onAuthStateChanged will handle setting currentUser and fetching events
     } catch (error: any) {
