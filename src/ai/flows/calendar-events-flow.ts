@@ -1,7 +1,7 @@
 
 'use server';
 /**
- * @fileOverview A Genkit flow to fetch calendar events.
+ * @fileOverview A Genkit flow to fetch actual calendar events from Google Calendar.
  *
  * - getCalendarEvents - A function to retrieve calendar events for a user.
  * - GetCalendarEventsInput - The input type for the getCalendarEvents function.
@@ -11,6 +11,7 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
+// Schema for individual events, mirroring a simplified Google Calendar event structure
 const EventSchema = z.object({
   summary: z.string().describe('The title or summary of the event.'),
   start: z.string().describe('The start date/time of the event in ISO format.'),
@@ -18,8 +19,8 @@ const EventSchema = z.object({
 });
 
 const GetCalendarEventsInputSchema = z.object({
-  userId: z.string().optional().describe('The ID of the user for whom to fetch events. Used to simulate fetching for an authenticated user.'),
-  oauthToken: z.string().optional().describe('The OAuth token for accessing the calendar API. Not used in the current mock implementation.'),
+  userId: z.string().optional().describe('The ID of the user (for logging/context, not directly for API call if token is present).'),
+  oauthToken: z.string().optional().describe('The OAuth access token for accessing the Google Calendar API.'),
 });
 export type GetCalendarEventsInput = z.infer<typeof GetCalendarEventsInputSchema>;
 
@@ -30,67 +31,81 @@ const GetCalendarEventsOutputSchema = z.discriminatedUnion("status", [
   }),
   z.object({
     status: z.literal("requires_authentication"),
-    message: z.string().describe("A message indicating that authentication is required."),
+    message: z.string().describe("A message indicating that authentication or a valid token is required."),
   }),
   z.object({
     status: z.literal("error"),
-    errorMessage: z.string().describe("A message describing the error that occurred."),
+    errorMessage: z.string().describe("A message describing the error that occurred during API call or processing."),
   }),
 ]);
 export type GetCalendarEventsOutput = z.infer<typeof GetCalendarEventsOutputSchema>;
 
-
-// Placeholder tool - this will be replaced with actual Google Calendar API calls
-const getCalendarEventsTool = ai.defineTool(
+// This tool now attempts to fetch real data from Google Calendar API
+const getActualCalendarEventsTool = ai.defineTool(
   {
-    name: 'getCalendarEventsTool',
-    description: 'Fetches calendar events for a user. Simulates API interaction.',
+    name: 'getActualCalendarEventsTool',
+    description: 'Fetches actual calendar events for a user from Google Calendar API using an OAuth token.',
     inputSchema: GetCalendarEventsInputSchema,
     outputSchema: GetCalendarEventsOutputSchema,
   },
   async (input) => {
-    // Simulate needing authentication if no userId is explicitly provided (is undefined)
-    if (input.userId === undefined) {
-      console.log('Calendar Tool: userId is undefined, returning requires_authentication.');
+    if (!input.oauthToken) {
+      console.log('Calendar Tool: OAuth token is missing, returning requires_authentication.');
       return {
         status: "requires_authentication",
-        message: "User not authenticated. Please connect your Google Calendar.",
+        message: "OAuth token not provided. Please authenticate to connect your Google Calendar.",
       };
     }
 
-    // If userId is present (even if an empty string, though not expected for a real UID),
-    // treat it as an attempt to fetch for an authenticated user.
-    console.log(`Calendar Tool: Simulating event fetch for userId: '${input.userId}' (UID length: ${input.userId?.length}).`);
-    return {
-      status: "success",
-      events: [
-        { summary: `Project Meeting for ${input.userId ? 'User ' + input.userId.substring(0,5) : 'Unknown User'}`, start: new Date(Date.now() + 1*60*60*1000).toISOString(), end: new Date(Date.now() + 1.5*60*60*1000).toISOString() },
-        { summary: "Client Demo - Axiom Corp", start: new Date(Date.now() + 3*60*60*1000).toISOString(), end: new Date(Date.now() + 4*60*60*1000).toISOString() },
-        { summary: "R&D Strategy Session", start: new Date(Date.now() + 1*24*60*60*1000 + 2*60*60*1000).toISOString(), end: new Date(Date.now() + 1*24*60*60*1000 + 2.75*60*60*1000).toISOString() },
-        { summary: "LifeOS Sync", start: new Date(Date.now() + 2*24*60*60*1000 + 4*60*60*1000).toISOString(), end: new Date(Date.now() + 2*24*60*60*1000 + 5*60*60*1000).toISOString() },
-      ],
-    };
+    try {
+      console.log('Calendar Tool: Attempting to fetch events from Google Calendar API with provided token.');
+      const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=' + (new Date().toISOString()) + '&orderBy=startTime&singleEvents=true&maxResults=10', {
+        headers: {
+          'Authorization': `Bearer ${input.oauthToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: "Unknown API error" }));
+        console.error('Google Calendar API error:', response.status, errorData);
+        if (response.status === 401 || response.status === 403) {
+            return {
+                status: "requires_authentication",
+                message: `Google Calendar API authentication failed (Status: ${response.status}). Token might be invalid or expired. Please re-authenticate. Details: ${errorData.error?.message || JSON.stringify(errorData)}`,
+            };
+        }
+        return {
+          status: "error",
+          errorMessage: `Google Calendar API request failed with status ${response.status}. Details: ${errorData.error?.message || JSON.stringify(errorData)}`,
+        };
+      }
+
+      const data = await response.json();
+      console.log('Calendar Tool: Successfully fetched events from API.');
+
+      const events = data.items.map((item: any) => ({
+        summary: item.summary || "No Title",
+        // Ensure start and end times are correctly parsed (dateTime for timed events, date for all-day events)
+        start: item.start?.dateTime || item.start?.date, 
+        end: item.end?.dateTime || item.end?.date,
+      })).filter((event:any) => event.start && event.end); // Ensure events have start/end
+
+      return {
+        status: "success",
+        events: events,
+      };
+
+    } catch (error: any) {
+      console.error('Calendar Tool: Exception during API call or processing -', error);
+      return {
+        status: "error",
+        errorMessage: `Failed to process calendar events: ${error.message || "An unexpected error occurred."}`,
+      };
+    }
   }
 );
 
-const calendarEventsPrompt = ai.definePrompt({
-  name: 'calendarEventsPrompt',
-  input: {schema: GetCalendarEventsInputSchema},
-  output: {schema: GetCalendarEventsOutputSchema},
-  tools: [getCalendarEventsTool],
-  prompt: `Fetch calendar events for the user using the getCalendarEventsTool.
-  User ID (if available): {{{userId}}}.
-  OAuth Token (if available): {{{oauthToken}}}.
-  
-  The tool will return the events directly or an authentication/error status.
-  Your primary role is to ensure the tool is called and its output is returned.
-  Do not attempt to create events yourself.
-  If the tool indicates authentication is required, ensure the output reflects that.
-  If the tool returns an error, ensure the output reflects that.
-  If the tool returns events, pass them through.
-  `,
-});
-
+// This flow directly calls the tool, no LLM prompt needed for this version
 const calendarEventsFlow = ai.defineFlow(
   {
     name: 'calendarEventsFlow',
@@ -98,20 +113,12 @@ const calendarEventsFlow = ai.defineFlow(
     outputSchema: GetCalendarEventsOutputSchema,
   },
   async (input) => {
-    try {
-      // Directly call the tool
-      const toolOutput = await getCalendarEventsTool(input);
-      return toolOutput;
-    } catch (error: any) {
-      console.error("Error in calendarEventsFlow:", error);
-      return {
-        status: "error",
-        errorMessage: error.message || "An unexpected error occurred in the flow.",
-      };
-    }
+    // Directly call the tool that attempts the API fetch
+    return getActualCalendarEventsTool(input);
   }
 );
 
 export async function getCalendarEvents(input: GetCalendarEventsInput): Promise<GetCalendarEventsOutput> {
   return calendarEventsFlow(input);
 }
+    
