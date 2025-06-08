@@ -15,8 +15,8 @@ import {
   addCalendarEventTool, 
   editCalendarEventTool, 
   deleteCalendarEventTool,
-  getActualCalendarEventsTool // Now using this tool
-} from './calendar-events-flow'; // Import the tools
+  getActualCalendarEventsTool 
+} from './calendar-events-flow'; 
 
 const ChatInputSchema = z.object({
   prompt: z.string().describe('The user\'s input message or question.'),
@@ -41,7 +41,7 @@ const chatPrompt = ai.definePrompt({
     addCalendarEventTool, 
     editCalendarEventTool, 
     deleteCalendarEventTool,
-    getActualCalendarEventsTool // Added tool for reading events
+    getActualCalendarEventsTool 
   ],
   system: `You are a helpful AI assistant integrated into a Life OS.
 Respond to the user's prompt concisely and helpfully.
@@ -53,6 +53,7 @@ If the user asks to perform any of these actions, use the respective tool.
 - For listing or getting events, you can specify a time range or ask for upcoming events. The tool will fetch them.
 
 If you need to use a calendar tool, and the user's OAuth token is provided in the input, make sure to pass it along to the tool. If the token is not available, you can inform the user that calendar actions require authentication.
+Unless specified otherwise by the user, assume any calendar operations (get, add, edit, delete) should apply to the user's 'primary' calendar by setting the 'calendarId' parameter to 'primary' for the tools.
 If an action is successful, confirm it. If it fails, or if you cannot perform an action (e.g., a tool is missing for a specific request not covered above), inform the user clearly.
 If details are missing for a calendar action, ask the user for them.
 
@@ -78,12 +79,11 @@ const chatFlow = ai.defineFlow(
     const {output} = await chatPrompt(input); 
     
     if (!output || typeof output.response !== 'string') {
-      // This case handles if the LLM output was so malformed Genkit couldn't even create an 'output' object,
-      // or if the 'response' field is missing or not a string after initial parsing by Genkit.
       console.error("Chat prompt returned malformed output or missing response field:", output);
       return { response: "I'm sorry, I couldn't generate a valid response structure at this moment. Please try rephrasing your request." };
     }
-    return output; // Output should conform to ChatOutputSchema due to definePrompt's validation
+    return output; 
   }
 );
 
+    

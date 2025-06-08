@@ -97,15 +97,13 @@ export const getActualCalendarEventsTool = ai.defineTool(
       };
     }
     try {
+      const calendarIdToUse = (input.calendarId && input.calendarId.trim() !== '') ? input.calendarId.trim() : 'primary';
       const timeMin = input.timeMin || new Date().toISOString();
-      // Safeguard maxResults to ensure it's a valid number. Zod's .default(10) should handle omissions.
-      // This explicitly ensures that if input.maxResults is somehow not a number (e.g. undefined, NaN),
-      // we use a sane default for the API call.
       const finalMaxResults = (typeof input.maxResults === 'number' && !isNaN(input.maxResults) && input.maxResults > 0)
                                 ? input.maxResults
                                 : 10;
 
-      const apiUrl = `https://www.googleapis.com/calendar/v3/calendars/${input.calendarId}/events?timeMin=${encodeURIComponent(timeMin)}&orderBy=startTime&singleEvents=true&maxResults=${finalMaxResults}`;
+      const apiUrl = `https://www.googleapis.com/calendar/v3/calendars/${calendarIdToUse}/events?timeMin=${encodeURIComponent(timeMin)}&orderBy=startTime&singleEvents=true&maxResults=${finalMaxResults}`;
       
       const response = await fetch(apiUrl, {
         headers: { 'Authorization': `Bearer ${input.oauthToken}` },
@@ -173,8 +171,10 @@ export const addCalendarEventTool = ai.defineTool(
       return { status: "requires_authentication", message: "OAuth token not provided." };
     }
     try {
-      const { oauthToken, calendarId, ...eventData } = input;
-      const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`, {
+      const { oauthToken, calendarId: rawCalendarId, ...eventData } = input;
+      const calendarIdToUse = (rawCalendarId && rawCalendarId.trim() !== '') ? rawCalendarId.trim() : 'primary';
+      
+      const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarIdToUse}/events`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${oauthToken}`,
@@ -226,11 +226,13 @@ export const editCalendarEventTool = ai.defineTool(
       return { status: "requires_authentication", message: "OAuth token not provided." };
     }
     try {
-      const { oauthToken, calendarId, eventId, ...eventData } = input;
+      const { oauthToken, calendarId: rawCalendarId, eventId, ...eventData } = input;
+      const calendarIdToUse = (rawCalendarId && rawCalendarId.trim() !== '') ? rawCalendarId.trim() : 'primary';
+
       if (Object.keys(eventData).length === 0) {
         return { status: "error", errorMessage: "No properties provided to update for the event." };
       }
-      const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events/${eventId}`, {
+      const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarIdToUse}/events/${eventId}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${oauthToken}`,
@@ -276,8 +278,10 @@ export const deleteCalendarEventTool = ai.defineTool(
       return { status: "requires_authentication", message: "OAuth token not provided." };
     }
     try {
-      const { oauthToken, calendarId, eventId } = input;
-      const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events/${eventId}`, {
+      const { oauthToken, calendarId: rawCalendarId, eventId } = input;
+      const calendarIdToUse = (rawCalendarId && rawCalendarId.trim() !== '') ? rawCalendarId.trim() : 'primary';
+
+      const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarIdToUse}/events/${eventId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${oauthToken}` },
       });
@@ -299,3 +303,6 @@ const deleteCalendarEventFlow = ai.defineFlow(
 export async function deleteCalendarEvent(input: DeleteCalendarEventInput): Promise<CalendarActionStatus> {
   return deleteCalendarEventFlow(input);
 }
+
+
+    
