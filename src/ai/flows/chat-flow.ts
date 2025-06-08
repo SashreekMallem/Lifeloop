@@ -15,8 +15,8 @@ import {
   addCalendarEventTool, 
   editCalendarEventTool, 
   deleteCalendarEventTool,
-  getActualCalendarEventsTool // Now using this tool
-} from './calendar-events-flow'; // Import the tools
+  getActualCalendarEventsTool
+} from './calendar-events-flow'; 
 
 const ChatInputSchema = z.object({
   prompt: z.string().describe('The user\'s input message or question.'),
@@ -47,10 +47,10 @@ const chatPrompt = ai.definePrompt({
 Respond to the user's prompt concisely and helpfully.
 You have tools to manage Google Calendar events: add, edit, delete, and get (list/read) events.
 If the user asks to perform any of these actions, use the respective tool.
-- For adding an event, you'll need at least a summary (title), start time, and end time. Dates and times should be in ISO 8601 format.
+- For adding an event, you'll need at least a summary (title), start time, and end time. Dates and times should be in ISO 8601 format (e.g., "2024-07-30T10:00:00-07:00") or "YYYY-MM-DD" for all-day events.
 - For editing an event, you'll need the event's ID and the details to change.
 - For deleting an event, you'll need the event's ID.
-- For listing or getting events, you can specify a time range or ask for upcoming events. The tool will fetch them.
+- For listing or getting events, you can specify a time range (provide timeMin in ISO 8601 format) or ask for upcoming events (in which case, OMIT the timeMin field to default to now). Similarly, OMIT maxResults if no specific limit is requested by the user, and it will default to 10.
 
 If you need to use a calendar tool, and the user's OAuth token is provided in the input, make sure to pass it along to the tool.
 If an OAuth token is NOT available OR if a tool reports an authentication failure (e.g., an invalid or expired token), clearly inform the user that they need to connect or re-authenticate their Google Calendar. This can usually be done via the 'Chrono-Stream // Calendar' widget on the dashboard. Do not attempt to use the tool again in the same turn if authentication failed.
@@ -77,16 +77,23 @@ const chatFlow = ai.defineFlow(
     outputSchema: ChatOutputSchema,
   },
   async (input) => {
-    // The prompt guides the LLM to use this token when calling tools.
-    // The tools themselves (addCalendarEventTool etc.) are defined to accept oauthToken in their input schema.
-    const {output} = await chatPrompt(input); 
-    
-    if (!output || typeof output.response !== 'string') {
-      console.error("Chat prompt returned malformed output or missing response field:", output);
-      // Fallback response if the LLM fails to structure its output correctly
-      return { response: "I'm sorry, I couldn't generate a valid response structure at this moment. Please try rephrasing your request." };
+    try {
+      const {output} = await chatPrompt(input); 
+      
+      if (!output || typeof output.response !== 'string') {
+        console.error("[chatFlow] Chat prompt returned malformed output or missing response field:", output);
+        return { response: "I'm sorry, I couldn't generate a valid response structure at this moment. Please try rephrasing your request." };
+      }
+      return { response: output.response }; 
+
+    } catch (error: any) {
+      console.error("[chatFlow] Error during chatPrompt execution:", error);
+      const errorMessage = error.message || error.toString() || "Unknown error";
+
+      if (errorMessage.includes("429") || errorMessage.toLowerCase().includes("too many requests") || errorMessage.toLowerCase().includes("quota")) {
+        return { response: "I'm currently experiencing high demand and have hit my request limit. Please try again in a moment." };
+      }
+      return { response: "An unexpected error occurred while processing your request. Please try again." };
     }
-    // Ensure the output strictly matches the schema, even if the LLM includes extra fields by mistake.
-    return { response: output.response }; 
   }
 );
