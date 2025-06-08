@@ -15,8 +15,8 @@ import {
   addCalendarEventTool, 
   editCalendarEventTool, 
   deleteCalendarEventTool,
-  getActualCalendarEventsTool 
-} from './calendar-events-flow'; 
+  getActualCalendarEventsTool // Now using this tool
+} from './calendar-events-flow'; // Import the tools
 
 const ChatInputSchema = z.object({
   prompt: z.string().describe('The user\'s input message or question.'),
@@ -52,12 +52,13 @@ If the user asks to perform any of these actions, use the respective tool.
 - For deleting an event, you'll need the event's ID.
 - For listing or getting events, you can specify a time range or ask for upcoming events. The tool will fetch them.
 
-If you need to use a calendar tool, and the user's OAuth token is provided in the input, make sure to pass it along to the tool. If the token is not available, you can inform the user that calendar actions require authentication.
+If you need to use a calendar tool, and the user's OAuth token is provided in the input, make sure to pass it along to the tool.
+If an OAuth token is NOT available OR if a tool reports an authentication failure (e.g., an invalid or expired token), clearly inform the user that they need to connect or re-authenticate their Google Calendar. This can usually be done via the 'Chrono-Stream // Calendar' widget on the dashboard. Do not attempt to use the tool again in the same turn if authentication failed.
 Unless specified otherwise by the user, assume any calendar operations (get, add, edit, delete) should apply to the user's 'primary' calendar by setting the 'calendarId' parameter to 'primary' for the tools.
-If an action is successful, confirm it. If it fails, or if you cannot perform an action (e.g., a tool is missing for a specific request not covered above), inform the user clearly.
-If details are missing for a calendar action, ask the user for them.
+If an action is successful (e.g. event created, events listed), confirm it. If it fails for reasons other than authentication, or if you cannot perform an action, inform the user clearly.
+If details are missing for a calendar action (e.g. time for a new event), ask the user for them.
 
-CRITICALLY IMPORTANT: Your final textual response to the user MUST ALWAYS be a single string within the 'response' field of a JSON object. For example: { "response": "Your event has been scheduled." } or { "response": "I found 3 events for tomorrow." } or { "response": "I'm sorry, I can't help with that specific request right now." }
+CRITICALLY IMPORTANT: Your final textual response to the user MUST ALWAYS be a single string within the 'response' field of a JSON object. For example: { "response": "Your event has been scheduled." } or { "response": "I found 3 events for tomorrow." } or { "response": "To access your calendar, please connect or re-authenticate in the Calendar widget on your dashboard." }
 Do NOT output any other JSON structure or plain text.
 `,
   prompt: `User prompt: {{{prompt}}}
@@ -76,14 +77,16 @@ const chatFlow = ai.defineFlow(
     outputSchema: ChatOutputSchema,
   },
   async (input) => {
+    // The prompt guides the LLM to use this token when calling tools.
+    // The tools themselves (addCalendarEventTool etc.) are defined to accept oauthToken in their input schema.
     const {output} = await chatPrompt(input); 
     
     if (!output || typeof output.response !== 'string') {
       console.error("Chat prompt returned malformed output or missing response field:", output);
+      // Fallback response if the LLM fails to structure its output correctly
       return { response: "I'm sorry, I couldn't generate a valid response structure at this moment. Please try rephrasing your request." };
     }
-    return output; 
+    // Ensure the output strictly matches the schema, even if the LLM includes extra fields by mistake.
+    return { response: output.response }; 
   }
 );
-
-    
