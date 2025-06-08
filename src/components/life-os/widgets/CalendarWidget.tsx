@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import WidgetCard from "./WidgetCard";
 import { CalendarDays, Link, Loader2, AlertTriangle, LogOut, UserCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ const formatEventDateTime = (dateTimeString?: string, options?: Intl.DateTimeFor
     const date = new Date(dateTimeString);
     // Check if the date is valid
     if (isNaN(date.getTime())) {
+      console.warn("formatEventDateTime encountered an invalid date string:", dateTimeString);
       return 'Invalid Date';
     }
     return date.toLocaleString([], options);
@@ -37,12 +38,11 @@ const formatEventDateTime = (dateTimeString?: string, options?: Intl.DateTimeFor
 const CalendarWidget = ({ className }: CalendarWidgetProps) => {
   const [eventsData, setEventsData] = useState<GetCalendarEventsOutput | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  // Error state is now part of eventsData for API errors, this is for other UI errors
-  // const [error, setError] = useState<string | null>(null); 
-
+  
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  const authStateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchCalendarEventsWithToken = async (userId?: string, token?: string) => {
     console.log("[CalendarWidget] Attempting to fetch events for userId:", userId, "with token:", token ? "present" : "absent");
@@ -60,11 +60,11 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
     }
 
     setIsLoading(true);
-    setAuthError(null); // Clear previous auth errors before new fetch
+    setAuthError(null); 
     try {
       const input: GetCalendarEventsInput = { userId: userId, oauthToken: token, calendarId: 'primary', maxResults: 10 };
       const result = await getCalendarEvents(input);
-      setEventsData(result); // Store the entire result object
+      setEventsData(result); 
 
     } catch (err: any) {
       console.error("Error fetching calendar events in widget:", err);
@@ -75,7 +75,11 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
   };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    if (authStateTimeoutRef.current) {
+      clearTimeout(authStateTimeoutRef.current);
+    }
+
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       setIsLoadingAuth(false);
       
@@ -86,9 +90,25 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
         if (storedToken) {
           fetchCalendarEventsWithToken(user.uid, storedToken);
         } else {
-          setEventsData({ status: "requires_authentication", message: "OAuth token not found in session. Please connect or re-authenticate." });
+          // Delay setting "token not found" to avoid race conditions during fast sign-out/refresh
+          if (authStateTimeoutRef.current) clearTimeout(authStateTimeoutRef.current);
+          authStateTimeoutRef.current = setTimeout(() => {
+            // Re-check current user status before declaring token absent
+            if (auth.currentUser && auth.currentUser.uid === user.uid) {
+                const recheckedToken = sessionStorage.getItem(`firebase_oauth_token_${user.uid}`);
+                if (!recheckedToken) {
+                    console.log("[CalendarWidget] Token still absent for user:", user.uid, "after delay. Setting requires_authentication.");
+                    setEventsData({ status: "requires_authentication", message: "OAuth token not found in session. Please connect or re-authenticate." });
+                } else {
+                    console.log("[CalendarWidget] Token found for user:", user.uid, "after delay. Fetching events.");
+                    fetchCalendarEventsWithToken(user.uid, recheckedToken);
+                }
+            } else {
+                 console.log("[CalendarWidget] User changed during token check delay or became null. Current auth.currentUser:", auth.currentUser?.uid);
+            }
+          }, 100); // 100ms delay
         }
-      } else {
+      } else { // User is signed out
         setEventsData({ status: "requires_authentication", message: "User not signed in."});
         const currentTokenUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id');
         if (currentTokenUserId) {
@@ -97,7 +117,13 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
         sessionStorage.removeItem('firebase_oauth_token_current_user_id'); 
       }
     });
-    return () => unsubscribe();
+    
+    return () => {
+      unsubscribe();
+      if (authStateTimeoutRef.current) {
+        clearTimeout(authStateTimeoutRef.current);
+      }
+    };
   }, []);
 
 
@@ -115,11 +141,7 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
         const token = credential.accessToken;
         sessionStorage.setItem(`firebase_oauth_token_${result.user.uid}`, token);
         sessionStorage.setItem('firebase_oauth_token_current_user_id', result.user.uid);
-
-        if (result.user) {
-            // setCurrentUser will be handled by onAuthStateChanged
-            // fetchCalendarEventsWithToken will also be called by onAuthStateChanged
-        }
+        // onAuthStateChanged will handle fetching events
       } else {
         throw new Error("No access token received from Google Sign-In.");
       }
@@ -127,19 +149,16 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
       console.error("Error during sign-in:", error);
       setAuthError(error.message || "Failed to sign in with Google.");
       const currentTokenUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id');
-        if (currentTokenUserId) {
-            sessionStorage.removeItem(`firebase_oauth_token_${currentTokenUserId}`);
-        }
+      if (currentTokenUserId) {
+          sessionStorage.removeItem(`firebase_oauth_token_${currentTokenUserId}`);
+      }
       sessionStorage.removeItem('firebase_oauth_token_current_user_id');
-    } finally {
-      // setIsLoadingAuth(false); // onAuthStateChanged will handle this
     }
   };
 
   const handleSignOut = async () => {
-    // setIsLoadingAuth(true); // Let onAuthStateChanged handle this
     setAuthError(null);
-    setEventsData(null); // Clear events on sign out
+    setEventsData(null); 
     const currentTokenUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id');
     if (currentTokenUserId) {
         sessionStorage.removeItem(`firebase_oauth_token_${currentTokenUserId}`);
@@ -151,15 +170,13 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
     } catch (error: any) {
       console.error("Error during sign-out:", error);
       setAuthError(error.message || "Failed to sign out.");
-    } finally {
-      // setIsLoadingAuth(false); // onAuthStateChanged will handle this
     }
   };
 
 
   return (
     <WidgetCard title="Chrono-Stream // Calendar" icon={<CalendarDays />} className={className}>
-      {isLoadingAuth && ( // Show loading only if no user state determined yet
+      {isLoadingAuth && ( 
         <div className="flex flex-col items-center justify-center h-full min-h-[150px]">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="mt-2 text-muted-foreground">Authenticating...</p>
@@ -226,7 +243,6 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
               <p className="text-muted-foreground text-center">No upcoming events found in your Google Calendar.</p>
             </div>
           )}
-          {/* Fallback for when eventsData is null but not loading and user is signed in (e.g. initial state before first fetch) */}
            {!isLoading && !eventsData && currentUser && (
              <div className="flex flex-col items-center justify-center h-full min-h-[100px]">
                <CalendarDays className="h-10 w-10 text-muted-foreground opacity-50 mb-2" />
