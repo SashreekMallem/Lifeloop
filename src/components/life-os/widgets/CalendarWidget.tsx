@@ -24,44 +24,38 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-      setIsLoadingAuth(false);
-      if (user) {
-        fetchCalendarEvents(user.uid); // Fetch events if user is logged in
-      } else {
-        setEventsData(null); // Clear events if user logs out
-      }
-    });
-    return () => unsubscribe();
-  }, []);
+  const fetchCalendarEvents = async (userId?: string) => {
+    console.log("[CalendarWidget] Attempting to fetch events for userId:", userId);
 
-
-  const fetchCalendarEvents = async (userId: string) => {
-    if (!currentUser) {
-        setError("Please connect your Google Calendar to view events.");
-        return;
+    if (!userId) {
+      // Handles cases where user is logged out or uid is not available.
+      // UI should primarily reflect logged-out state based on currentUser.
+      // Clearing eventsData ensures no stale data is shown.
+      setEventsData(null);
+      setIsLoading(false); // Ensure loading is stopped if it was on
+      // No specific error set here as it's an expected state (logged out).
+      return;
     }
+
     setIsLoading(true);
-    setError(null);
+    setError(null); // Clear previous operational errors before a new fetch
     try {
-      // For now, the flow doesn't use the userId or token directly,
-      // but we pass it to simulate future authenticated calls
       const input: GetCalendarEventsInput = { userId: userId, oauthToken: "mock_token_for_now" };
+      console.log("[CalendarWidget] Input to getCalendarEvents flow:", JSON.stringify(input));
       const result = await getCalendarEvents(input);
+      console.log("[CalendarWidget] Result from getCalendarEvents flow:", JSON.stringify(result));
       
-      if (result.status === "requires_authentication") {
-        setError("Authentication required. Please connect your Google Calendar.");
+      if (result.status === "success") {
+        setEventsData(result);
+      } else if (result.status === "requires_authentication") {
+        setError(result.message || "Authentication required by the calendar service. Please try reconnecting your Google Calendar if issues persist.");
         setEventsData(null);
       } else if (result.status === "error") {
         setError(result.errorMessage || "Failed to load calendar events.");
         setEventsData(null);
-      } else {
-        setEventsData(result);
       }
     } catch (err: any) {
-      console.error("Error fetching calendar events:", err);
+      console.error("Error fetching calendar events in widget:", err);
       setError(err.message || "An unexpected error occurred while fetching calendar events.");
       setEventsData(null);
     } finally {
@@ -69,35 +63,49 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
     }
   };
 
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      console.log("[CalendarWidget] onAuthStateChanged - user:", user ? {uid: user.uid, displayName: user.displayName} : null);
+      setCurrentUser(user); // Update currentUser for UI (display name, disconnect button)
+      setIsLoadingAuth(false);
+      
+      // Call fetchCalendarEvents with user?.uid.
+      // If user is null, user.uid will be undefined, and fetchCalendarEvents will handle it by not fetching.
+      fetchCalendarEvents(user?.uid); 
+    });
+    return () => unsubscribe();
+  }, []);
+
+
   const handleSignIn = async () => {
     setIsLoadingAuth(true);
     setAuthError(null);
+    setError(null); // Clear operational errors as well
     const provider = new GoogleAuthProvider();
-    // Add scope for Google Calendar API
     provider.addScope('https://www.googleapis.com/auth/calendar.readonly');
     provider.addScope('https://www.googleapis.com/auth/calendar.events.readonly');
     try {
-      console.log("Firebase app:", app);
-      console.log("Firebase auth:", auth);
       await signInWithPopup(auth, provider);
-      // onAuthStateChanged will handle setting currentUser and fetching events
+      // onAuthStateChanged will handle setting currentUser and triggering event fetch
     } catch (error: any) {
       console.error("Error during sign-in:", error);
       setAuthError(error.message || "Failed to sign in with Google.");
-      setCurrentUser(null); // Ensure user is null on error
+      setCurrentUser(null); 
       setIsLoadingAuth(false);
     }
   };
 
   const handleSignOut = async () => {
-    setIsLoadingAuth(true);
+    setIsLoadingAuth(true); // Visually indicate action is happening
+    setAuthError(null);
+    setError(null);
     try {
       await signOut(auth);
-      // onAuthStateChanged will handle clearing currentUser and eventsData
+      // onAuthStateChanged will set currentUser to null and fetchCalendarEvents(undefined) will clear events.
     } catch (error: any) {
       console.error("Error during sign-out:", error);
       setAuthError(error.message || "Failed to sign out.");
-      setIsLoadingAuth(false); // Ensure loading state is cleared
+      setIsLoadingAuth(false); 
     }
   };
 
@@ -125,8 +133,10 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
       {!isLoadingAuth && currentUser && (
         <>
           <div className="flex justify-between items-center mb-3">
-            <p className="text-xs text-green-400">Calendar Connected: {currentUser.displayName || currentUser.email}</p>
-            <Button onClick={handleSignOut} variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive">
+            <p className="text-xs text-green-400 truncate max-w-[calc(100%-80px)]" title={currentUser.displayName || currentUser.email || "User"}>
+              Calendar Connected: {currentUser.displayName || currentUser.email}
+            </p>
+            <Button onClick={handleSignOut} variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive flex-shrink-0">
               <LogOut size={14} className="mr-1" /> Disconnect
             </Button>
           </div>
@@ -138,7 +148,7 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
               <p className="mt-2 text-muted-foreground">Loading events...</p>
             </div>
           )}
-          {error && !isLoading && (
+          {error && !isLoading && ( // Display operational error if present
             <div className="flex flex-col items-center justify-center h-full min-h-[100px] text-center">
               <AlertTriangle className="h-8 w-8 text-destructive mb-2" />
               <p className="text-destructive">{error}</p>
@@ -163,6 +173,13 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
               <p className="text-muted-foreground text-center">No upcoming events found in your calendar.</p>
             </div>
           )}
+           {/* Case for when flow status is not success, and not loading, and no specific error message from flow (e.g. requires_auth was handled but no events) */}
+           {!isLoading && !error && eventsData && eventsData.status !== "success" && (
+             <div className="flex flex-col items-center justify-center h-full min-h-[100px]">
+              <AlertTriangle className="h-8 w-8 text-yellow-500 mb-2" />
+              <p className="text-muted-foreground text-center">Could not retrieve events. Status: {eventsData.status}.</p>
+             </div>
+           )}
         </>
       )}
     </WidgetCard>
