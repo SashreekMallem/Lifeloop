@@ -19,7 +19,7 @@ import {z} from 'genkit';
 
 // Common Schemas
 const EventDateTimeSchema = z.object({
-  dateTime: z.string().datetime().describe("The start or end date/time of the event in ISO 8601 format (e.g., '2024-07-30T10:00:00-07:00')."),
+  dateTime: z.string().datetime().describe("The start or end date/time of the event in ISO 8601 format (e.g., '2024-07-30T10:00:00-07:00' or '2024-07-30' for all-day events)."),
   timeZone: z.string().optional().describe("The time zone of the date/time (e.g., 'America/Los_Angeles'). If not provided, the calendar's default time zone will be used."),
 });
 
@@ -37,6 +37,8 @@ const EventSchema = z.object({
   location: z.string().optional().describe("The location of the event."),
   // Add attendees, recurrence, etc. as needed later
 });
+export type CalendarEvent = z.infer<typeof EventSchema>;
+
 
 // Output Schema for most actions
 const CalendarActionStatusSchema = z.discriminatedUnion("status", [
@@ -44,6 +46,8 @@ const CalendarActionStatusSchema = z.discriminatedUnion("status", [
     status: z.literal("success"),
     eventId: z.string().optional().describe("The ID of the event that was actioned upon (e.g., created or modified)."),
     message: z.string().optional().describe("A success message."),
+    // Include the full event if it was created or modified and is available
+    event: EventSchema.optional().describe("The event object after creation or modification, if applicable."),
   }),
   z.object({
     status: z.literal("requires_authentication"),
@@ -123,16 +127,50 @@ export const getActualCalendarEventsTool = ai.defineTool(
         };
       }
       const data = await response.json();
-      const events = (data.items || []).map((item: any) => ({
-        id: item.id,
-        summary: item.summary || "No Title",
-        description: item.description,
-        start: { dateTime: item.start?.dateTime || item.start?.date, timeZone: item.start?.timeZone },
-        end: { dateTime: item.end?.dateTime || item.end?.date, timeZone: item.end?.timeZone },
-        location: item.location,
-      })).filter((event:any) => event.start?.dateTime && event.end?.dateTime);
-      return { status: "success", events: events };
+      const items = data.items || [];
+      const mappedEvents = items.map((item: any) => {
+        let startValue: string | undefined = undefined;
+        let endValue: string | undefined = undefined;
+
+        if (item.start) {
+          if (typeof item.start.dateTime === 'string' && item.start.dateTime.length > 0) {
+            startValue = item.start.dateTime;
+          } else if (typeof item.start.date === 'string' && item.start.date.length > 0) {
+            startValue = item.start.date; // For all-day events
+          }
+        }
+
+        if (item.end) {
+          if (typeof item.end.dateTime === 'string' && item.end.dateTime.length > 0) {
+            endValue = item.end.dateTime;
+          } else if (typeof item.end.date === 'string' && item.end.date.length > 0) {
+            // For all-day events, Google Calendar API docs say end.date is exclusive.
+            // To make it inclusive for display or full-day calculations, some might adjust it.
+            // For now, we'll use it as is, as `new Date()` handles "YYYY-MM-DD".
+            endValue = item.end.date;
+          }
+        }
+        
+        if (!startValue || !endValue) {
+            console.warn('Filtered out event due to missing/invalid start/end date/dateTime:', {id: item.id, summary: item.summary, start: item.start, end: item.end });
+            return null; 
+        }
+
+        return {
+            id: item.id,
+            summary: item.summary || "No Title",
+            description: item.description,
+            start: { dateTime: startValue, timeZone: item.start?.timeZone },
+            end: { dateTime: endValue, timeZone: item.end?.timeZone },
+            location: item.location,
+        };
+      });
+
+      const events = mappedEvents.filter((event): event is CalendarEvent => event !== null);
+      return { status: "success", events };
+
     } catch (error: any) {
+      console.error("[getActualCalendarEventsTool] Error processing calendar events:", error);
       return { status: "error", errorMessage: `Failed to process calendar events: ${error.message || "Unexpected error."}` };
     }
   }
@@ -152,8 +190,8 @@ export async function getCalendarEvents(input: GetCalendarEventsInput): Promise<
 const AddCalendarEventInputSchema = BaseEventInputSchema.extend({
   summary: z.string().describe("The title of the event."),
   description: z.string().optional().describe("A description for the event."),
-  start: EventDateTimeSchema.describe("The start date/time object for the event."),
-  end: EventDateTimeSchema.describe("The end date/time object for the event."),
+  start: EventDateTimeSchema.describe("The start date/time object for the event. For all-day events, dateTime should be 'YYYY-MM-DD' and no timeZone is needed."),
+  end: EventDateTimeSchema.describe("The end date/time object for the event. For all-day events, dateTime should be 'YYYY-MM-DD' (exclusive end for GCal API, so often one day after start for a single all-day event)."),
   location: z.string().optional().describe("The location of the event."),
   // attendees: z.array(z.object({ email: z.string().email() })).optional().describe("List of attendees with their emails."),
 });
@@ -162,7 +200,7 @@ export type AddCalendarEventInput = z.infer<typeof AddCalendarEventInputSchema>;
 export const addCalendarEventTool = ai.defineTool(
   {
     name: 'addCalendarEventTool',
-    description: 'Adds a new event to the Google Calendar.',
+    description: 'Adds a new event to the Google Calendar. Requires summary, start, and end. Start and end times should be in ISO 8601 format (e.g., "2024-07-30T10:00:00-07:00") or "YYYY-MM-DD" for all-day events.',
     inputSchema: AddCalendarEventInputSchema,
     outputSchema: CalendarActionStatusSchema,
   },
@@ -174,21 +212,55 @@ export const addCalendarEventTool = ai.defineTool(
       const { oauthToken, calendarId: rawCalendarId, ...eventData } = input;
       const calendarIdToUse = (rawCalendarId && rawCalendarId.trim() !== '') ? rawCalendarId.trim() : 'primary';
       
+      // Prepare event body for Google Calendar API
+      // For all-day events, Google expects `date` instead of `dateTime` and `timeZone`
+      const googleEvent: any = {
+        summary: eventData.summary,
+        description: eventData.description,
+        location: eventData.location,
+      };
+
+      // Handle start
+      if (eventData.start.dateTime.length === 10 && eventData.start.dateTime.match(/^\d{4}-\d{2}-\d{2}$/)) { // YYYY-MM-DD
+        googleEvent.start = { date: eventData.start.dateTime };
+      } else {
+        googleEvent.start = { dateTime: eventData.start.dateTime, timeZone: eventData.start.timeZone };
+      }
+      
+      // Handle end
+      if (eventData.end.dateTime.length === 10 && eventData.end.dateTime.match(/^\d{4}-\d{2}-\d{2}$/)) { // YYYY-MM-DD
+        googleEvent.end = { date: eventData.end.dateTime };
+      } else {
+        googleEvent.end = { dateTime: eventData.end.dateTime, timeZone: eventData.end.timeZone };
+      }
+
       const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarIdToUse}/events`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${oauthToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(eventData),
+        body: JSON.stringify(googleEvent),
       });
       const responseData = await response.json();
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) return { status: "requires_authentication", message: `API Auth Error (Status ${response.status}): ${responseData.error?.message}` };
         return { status: "error", errorMessage: `API Error (Status ${response.status}): ${responseData.error?.message || JSON.stringify(responseData)}` };
       }
-      return { status: "success", eventId: responseData.id, message: "Event created successfully." };
+
+      // Map Google response back to our EventSchema for consistency if needed
+      const createdEvent: CalendarEvent = {
+        id: responseData.id,
+        summary: responseData.summary || "No Title",
+        description: responseData.description,
+        start: {dateTime: responseData.start?.dateTime || responseData.start?.date, timeZone: responseData.start?.timeZone},
+        end: {dateTime: responseData.end?.dateTime || responseData.end?.date, timeZone: responseData.end?.timeZone},
+        location: responseData.location
+      };
+
+      return { status: "success", eventId: responseData.id, message: "Event created successfully.", event: createdEvent };
     } catch (error: any) {
+      console.error("[addCalendarEventTool] Error:", error);
       return { status: "error", errorMessage: `Failed to add event: ${error.message}` };
     }
   }
@@ -208,8 +280,8 @@ const EditCalendarEventInputSchema = BaseEventInputSchema.extend({
   eventId: z.string().describe("The ID of the event to edit."),
   summary: z.string().optional().describe("The new title of the event."),
   description: z.string().optional().describe("The new description for the event."),
-  start: EventDateTimeSchema.optional().describe("The new start date/time object."),
-  end: EventDateTimeSchema.optional().describe("The new end date/time object."),
+  start: EventDateTimeSchema.optional().describe("The new start date/time object. For all-day events, dateTime should be 'YYYY-MM-DD'."),
+  end: EventDateTimeSchema.optional().describe("The new end date/time object. For all-day events, dateTime should be 'YYYY-MM-DD'."),
   location: z.string().optional().describe("The new location of the event."),
 });
 export type EditCalendarEventInput = z.infer<typeof EditCalendarEventInputSchema>;
@@ -217,7 +289,7 @@ export type EditCalendarEventInput = z.infer<typeof EditCalendarEventInputSchema
 export const editCalendarEventTool = ai.defineTool(
   {
     name: 'editCalendarEventTool',
-    description: 'Edits an existing event in the Google Calendar.',
+    description: 'Edits an existing event in the Google Calendar. Requires eventId and at least one field to update. Dates/times should be ISO 8601 or YYYY-MM-DD.',
     inputSchema: EditCalendarEventInputSchema,
     outputSchema: CalendarActionStatusSchema,
   },
@@ -226,27 +298,59 @@ export const editCalendarEventTool = ai.defineTool(
       return { status: "requires_authentication", message: "OAuth token not provided." };
     }
     try {
-      const { oauthToken, calendarId: rawCalendarId, eventId, ...eventData } = input;
+      const { oauthToken, calendarId: rawCalendarId, eventId, ...updates } = input;
       const calendarIdToUse = (rawCalendarId && rawCalendarId.trim() !== '') ? rawCalendarId.trim() : 'primary';
 
-      if (Object.keys(eventData).length === 0) {
+      if (Object.keys(updates).length === 0) {
         return { status: "error", errorMessage: "No properties provided to update for the event." };
       }
+
+      // Prepare updates for Google Calendar API, handling all-day events
+      const googleUpdates: any = {};
+      if (updates.summary !== undefined) googleUpdates.summary = updates.summary;
+      if (updates.description !== undefined) googleUpdates.description = updates.description;
+      if (updates.location !== undefined) googleUpdates.location = updates.location;
+      
+      if (updates.start) {
+        if (updates.start.dateTime.length === 10 && updates.start.dateTime.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          googleUpdates.start = { date: updates.start.dateTime };
+        } else {
+          googleUpdates.start = { dateTime: updates.start.dateTime, timeZone: updates.start.timeZone };
+        }
+      }
+      if (updates.end) {
+         if (updates.end.dateTime.length === 10 && updates.end.dateTime.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          googleUpdates.end = { date: updates.end.dateTime };
+        } else {
+          googleUpdates.end = { dateTime: updates.end.dateTime, timeZone: updates.end.timeZone };
+        }
+      }
+
       const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarIdToUse}/events/${eventId}`, {
-        method: 'PUT',
+        method: 'PUT', // Or PATCH if you only want to send changed fields and not replace the whole event
         headers: {
           'Authorization': `Bearer ${oauthToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(eventData),
+        body: JSON.stringify(googleUpdates),
       });
       const responseData = await response.json();
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) return { status: "requires_authentication", message: `API Auth Error (Status ${response.status}): ${responseData.error?.message}` };
         return { status: "error", errorMessage: `API Error (Status ${response.status}): ${responseData.error?.message || JSON.stringify(responseData)}` };
       }
-      return { status: "success", eventId: responseData.id, message: "Event updated successfully." };
+      
+      const updatedEvent: CalendarEvent = {
+        id: responseData.id,
+        summary: responseData.summary || "No Title",
+        description: responseData.description,
+        start: {dateTime: responseData.start?.dateTime || responseData.start?.date, timeZone: responseData.start?.timeZone},
+        end: {dateTime: responseData.end?.dateTime || responseData.end?.date, timeZone: responseData.end?.timeZone},
+        location: responseData.location
+      };
+      return { status: "success", eventId: responseData.id, message: "Event updated successfully.", event: updatedEvent };
     } catch (error: any) {
+      console.error("[editCalendarEventTool] Error:", error);
       return { status: "error", errorMessage: `Failed to edit event: ${error.message}` };
     }
   }
@@ -269,9 +373,9 @@ export type DeleteCalendarEventInput = z.infer<typeof DeleteCalendarEventInputSc
 export const deleteCalendarEventTool = ai.defineTool(
   {
     name: 'deleteCalendarEventTool',
-    description: 'Deletes an event from the Google Calendar.',
+    description: 'Deletes an event from the Google Calendar. Requires eventId.',
     inputSchema: DeleteCalendarEventInputSchema,
-    outputSchema: CalendarActionStatusSchema, // Output can be just success/failure
+    outputSchema: CalendarActionStatusSchema, 
   },
   async (input) => {
     if (!input.oauthToken) {
@@ -290,8 +394,9 @@ export const deleteCalendarEventTool = ai.defineTool(
         if (response.status === 401 || response.status === 403) return { status: "requires_authentication", message: `API Auth Error (Status ${response.status}): ${errorData.error?.message}` };
         return { status: "error", errorMessage: `API Error (Status ${response.status}): ${errorData.error?.message || 'Failed to delete event'}` };
       }
-      return { status: "success", message: "Event deleted successfully." };
+      return { status: "success", eventId: eventId, message: "Event deleted successfully." };
     } catch (error: any) {
+      console.error("[deleteCalendarEventTool] Error:", error);
       return { status: "error", errorMessage: `Failed to delete event: ${error.message}` };
     }
   }
@@ -303,6 +408,3 @@ const deleteCalendarEventFlow = ai.defineFlow(
 export async function deleteCalendarEvent(input: DeleteCalendarEventInput): Promise<CalendarActionStatus> {
   return deleteCalendarEventFlow(input);
 }
-
-
-    
