@@ -1,24 +1,49 @@
 
 'use client';
-import React from 'react';
-import { Bot, Send, Settings } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Bot, Send, Settings, Loader2 } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import LifeOSLogo from './LifeOSLogo';
+import { chatWithAI, type ChatInput, type ChatOutput } from '@/ai/flows/chat-flow';
 
 const AiConsole = () => {
-  const [input, setInput] = React.useState('');
-  // Start with no mock messages
-  const [messages, setMessages] = React.useState<{sender: string, text: string}[]>([]);
+  const [input, setInput] = useState('');
+  const [messages, setMessages] = useState<{id: string, sender: string, text: string}[]>([]);
+  const [isAiResponding, setIsAiResponding] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  const handleSend = () => {
-    if (input.trim()) {
-      setMessages([...messages, { sender: 'user', text: input }]);
-      // Simulate AI response (to be replaced with actual Genkit flow call)
-      setTimeout(() => {
-        setMessages(prev => [...prev, { sender: 'ai', text: `Processing: "${input}"...` }]);
-      }, 1000);
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const handleSend = async () => {
+    if (input.trim() && !isAiResponding) {
+      const userMessage = { id: Date.now().toString() + '-user', sender: 'user', text: input };
+      setMessages(prev => [...prev, userMessage]);
       setInput('');
+      setIsAiResponding(true);
+
+      try {
+        const aiThinkingMessage = { id: Date.now().toString() + '-ai-thinking', sender: 'ai', text: 'Thinking...' };
+        setMessages(prev => [...prev, aiThinkingMessage]);
+        
+        const aiResponse = await chatWithAI({ prompt: input });
+        
+        setMessages(prev => prev.filter(msg => msg.id !== aiThinkingMessage.id)); // Remove "Thinking..."
+        setMessages(prev => [...prev, { id: Date.now().toString() + '-ai', sender: 'ai', text: aiResponse.response }]);
+
+      } catch (error) {
+        console.error("Error calling AI flow:", error);
+        setMessages(prev => prev.filter(msg => msg.id !== aiThinkingMessage.id)); // Remove "Thinking..."
+        setMessages(prev => [...prev, {id: Date.now().toString() + '-ai-error', sender: 'ai', text: 'Sorry, I encountered an error. Please try again.' }]);
+      } finally {
+        setIsAiResponding(false);
+      }
     }
   };
 
@@ -39,19 +64,21 @@ const AiConsole = () => {
             <p className="text-xs">Awaiting your command.</p>
           </div>
         )}
-        {messages.map((msg, index) => (
-          <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`p-3 rounded-xl max-w-[80%] text-sm leading-relaxed
+        {messages.map((msg) => (
+          <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`p-3 rounded-xl max-w-[85%] text-sm leading-relaxed
               ${msg.sender === 'user' 
-                ? 'bg-primary/20 text-foreground shadow-md' // Adjusted user message for better contrast
+                ? 'bg-primary/20 text-foreground shadow-md'
                 : 'bg-card/80 backdrop-blur-sm border border-primary/10 text-foreground shadow-lg'
               } 
               ${msg.sender === 'ai' && 'glassmorphic'}`}>
-              {msg.sender === 'ai' && <Bot size={16} className="inline mr-2 mb-0.5 text-primary" />}
+              {msg.sender === 'ai' && msg.text === 'Thinking...' && <Loader2 size={16} className="inline mr-2 mb-0.5 text-primary animate-spin" />}
+              {msg.sender === 'ai' && msg.text !== 'Thinking...' && <Bot size={16} className="inline mr-2 mb-0.5 text-primary" />}
               {msg.text}
             </div>
           </div>
         ))}
+        <div ref={messagesEndRef} />
       </div>
       
       <div className="mt-auto pt-4 border-t border-[hsla(var(--primary-rgb),0.05)]">
@@ -59,7 +86,7 @@ const AiConsole = () => {
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask Gemini..."
+            placeholder={isAiResponding ? "AI is responding..." : "Ask Gemini..."}
             className="flex-grow bg-background/50 border-primary/20 focus:border-primary focus:ring-primary text-sm min-h-[60px] resize-none glassmorphic"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -67,13 +94,18 @@ const AiConsole = () => {
                 handleSend();
               }
             }}
+            disabled={isAiResponding}
           />
-          <Button onClick={handleSend} size="icon" className="bg-primary hover:bg-primary/80 text-primary-foreground h-[60px] w-[60px] rounded-xl shadow-lg hover:shadow-primary/50 transition-all">
-            <Send size={20} />
+          <Button 
+            onClick={handleSend} 
+            size="icon" 
+            className="bg-primary hover:bg-primary/80 text-primary-foreground h-[60px] w-[60px] rounded-xl shadow-lg hover:shadow-primary/50 transition-all disabled:opacity-50"
+            disabled={isAiResponding}
+          >
+            {isAiResponding ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
           </Button>
         </div>
         <div className="text-xs text-muted-foreground mt-2 text-center">
-          {/* Quick Actions can be dynamically populated by AI later */}
           Quick Actions: [Focus Session] [Replan Day]
         </div>
       </div>
