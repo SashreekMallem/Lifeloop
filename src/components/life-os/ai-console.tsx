@@ -6,12 +6,24 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import LifeOSLogo from './LifeOSLogo';
 import { chatWithAI, type ChatInput, type ChatOutput } from '@/ai/flows/chat-flow';
+import { getAuth, type User } from 'firebase/auth'; // To check for current user
+import { app } from '@/lib/firebase/client'; // Firebase app instance
+
+const auth = getAuth(app);
 
 const AiConsole = () => {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<{id: string, sender: string, text: string}[]>([]);
   const [isAiResponding, setIsAiResponding] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged(user => {
+      setCurrentUser(user);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -23,23 +35,40 @@ const AiConsole = () => {
 
   const handleSend = async () => {
     if (input.trim() && !isAiResponding) {
-      const userMessage = { id: Date.now().toString() + '-user', sender: 'user', text: input };
+      const userMessageText = input;
+      const userMessage = { id: Date.now().toString() + '-user', sender: 'user', text: userMessageText };
       setMessages(prev => [...prev, userMessage]);
       setInput('');
       setIsAiResponding(true);
+
+      // Retrieve OAuth token if user is signed in and token exists in session storage
+      // This token is primarily for Google Calendar API interactions via AI
+      let oauthToken: string | undefined = undefined;
+      if (currentUser) {
+        const storedTokenUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id');
+        if (storedTokenUserId === currentUser.uid) {
+          oauthToken = sessionStorage.getItem(`firebase_oauth_token_${currentUser.uid}`) || undefined;
+        }
+      }
+      if (oauthToken) {
+        console.log("[AiConsole] Found OAuth token for current user, will pass to chat flow.");
+      } else {
+         console.log("[AiConsole] No OAuth token found for current user. Calendar actions might require re-auth.");
+      }
 
       try {
         const aiThinkingMessage = { id: Date.now().toString() + '-ai-thinking', sender: 'ai', text: 'Thinking...' };
         setMessages(prev => [...prev, aiThinkingMessage]);
         
-        const aiResponse = await chatWithAI({ prompt: input });
+        const chatInput: ChatInput = { prompt: userMessageText, oauthToken };
+        const aiResponse = await chatWithAI(chatInput);
         
-        setMessages(prev => prev.filter(msg => msg.id !== aiThinkingMessage.id)); // Remove "Thinking..."
+        setMessages(prev => prev.filter(msg => msg.id !== aiThinkingMessage.id));
         setMessages(prev => [...prev, { id: Date.now().toString() + '-ai', sender: 'ai', text: aiResponse.response }]);
 
       } catch (error) {
-        console.error("Error calling AI flow:", error);
-        setMessages(prev => prev.filter(msg => msg.id !== aiThinkingMessage.id)); // Remove "Thinking..."
+        console.error("Error calling AI chat flow:", error);
+        setMessages(prev => prev.filter(msg => msg.id !== aiThinkingMessage.id)); 
         setMessages(prev => [...prev, {id: Date.now().toString() + '-ai-error', sender: 'ai', text: 'Sorry, I encountered an error. Please try again.' }]);
       } finally {
         setIsAiResponding(false);
@@ -61,7 +90,7 @@ const AiConsole = () => {
           <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
             <Bot size={32} className="mb-2 opacity-50" />
             <p className="text-sm">AI Console Active.</p>
-            <p className="text-xs">Awaiting your command.</p>
+            <p className="text-xs">Awaiting your command. Try asking to schedule an event!</p>
           </div>
         )}
         {messages.map((msg) => (

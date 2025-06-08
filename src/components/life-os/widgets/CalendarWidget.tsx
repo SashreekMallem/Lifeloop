@@ -6,8 +6,8 @@ import WidgetCard from "./WidgetCard";
 import { CalendarDays, Link, Loader2, AlertTriangle, LogOut, UserCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getCalendarEvents, type GetCalendarEventsInput, type GetCalendarEventsOutput } from '@/ai/flows/calendar-events-flow';
-import { app } from '@/lib/firebase/client'; // Import Firebase app
-import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, type User, OAuthProvider } from "firebase/auth";
+import { app } from '@/lib/firebase/client';
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, type User } from "firebase/auth";
 
 interface CalendarWidgetProps {
   className?: string;
@@ -24,7 +24,7 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  const fetchCalendarEvents = async (userId?: string, token?: string) => {
+  const fetchCalendarEventsWithToken = async (userId?: string, token?: string) => {
     console.log("[CalendarWidget] Attempting to fetch events for userId:", userId, "with token:", token ? "present" : "absent");
 
     if (!userId) {
@@ -34,7 +34,7 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
     }
 
     if (!token) {
-      setEventsData({ status: "requires_authentication", message: "OAuth token not available. Please re-authenticate." });
+      setEventsData({ status: "requires_authentication", message: "OAuth token not available. Please re-authenticate to fetch events." });
       setIsLoading(false);
       return;
     }
@@ -43,18 +43,16 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
     setError(null);
     try {
       const input: GetCalendarEventsInput = { userId: userId, oauthToken: token };
-      console.log("[CalendarWidget] Input to getCalendarEvents flow:", JSON.stringify(input));
       const result = await getCalendarEvents(input);
-      console.log("[CalendarWidget] Result from getCalendarEvents flow:", JSON.stringify(result));
       
       if (result.status === "success") {
         setEventsData(result);
       } else if (result.status === "requires_authentication") {
         setError(result.message || "Authentication required by the calendar service. Please try reconnecting your Google Calendar.");
-        setEventsData(result); // Keep the status for UI
+        setEventsData(result); 
       } else if (result.status === "error") {
         setError(result.errorMessage || "Failed to load calendar events.");
-        setEventsData(result); // Keep the status for UI
+        setEventsData(result);
       }
     } catch (err: any) {
       console.error("Error fetching calendar events in widget:", err);
@@ -67,47 +65,25 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log("[CalendarWidget] onAuthStateChanged - user:", user ? {uid: user.uid, displayName: user.displayName} : null);
       setCurrentUser(user);
       setIsLoadingAuth(false);
       
       if (user) {
-        // Attempt to get a fresh OAuth token for Google Calendar API.
-        // This is a simplified approach; robust token management is complex.
-        try {
-          // Firebase ID token is not the same as an OAuth access token for Google APIs.
-          // For direct API calls, you'd typically use the access token from the OAuthCredential.
-          // However, getting it *again* here without re-triggering popup can be tricky.
-          // The token obtained during signInWithPopup is the one to use initially.
-          // This part of the example assumes the token management is handled or token is already available.
-          // For a *real* app, this token would likely come from a secure store or be refreshed.
-          // The `accessToken` from `signInWithPopup` is what we need to pass.
-          // We'll rely on the token passed during signIn as there's no simple way to re-fetch it here without UX impact.
-          // The token is now retrieved during handleSignIn and passed to fetchCalendarEvents.
-          // If the component re-mounts and user is still there, we might not have the token.
-          // This is a limitation of client-side token handling.
-
-          // For this iteration, if user exists, we assume token might be stale or missing
-          // and rely on re-authentication if `fetchCalendarEvents` is called without a token.
-          // The current logic in `handleSignIn` now correctly passes the token.
-          // If the page reloads, `handleSignIn` isn't called, so no token.
-          // This means after a reload, it will likely show "Connect" or error.
-          
-          if (sessionStorage.getItem(`firebase_oauth_token_${user.uid}`)) {
-            fetchCalendarEvents(user.uid, sessionStorage.getItem(`firebase_oauth_token_${user.uid}`)!);
-          } else {
-            // No token, user might need to re-authenticate or we just show requires_authentication
-             setEventsData({ status: "requires_authentication", message: "Session loaded. Reconnect calendar if events don't appear." });
-          }
-
-        } catch (tokenError) {
-          console.error("Error getting ID token in onAuthStateChanged:", tokenError);
-          setAuthError("Could not retrieve authentication token for calendar.");
-          fetchCalendarEvents(user.uid, undefined); // Signal no token
+        const storedTokenUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id');
+        const storedToken = storedTokenUserId === user.uid ? sessionStorage.getItem(`firebase_oauth_token_${user.uid}`) : null;
+        
+        if (storedToken) {
+          fetchCalendarEventsWithToken(user.uid, storedToken);
+        } else {
+          // No valid token in session storage for this user, prompt for re-auth if needed for actions.
+          // For read, it will try but likely show "requires_authentication" from flow if token is stale/missing.
+          setEventsData({ status: "requires_authentication", message: "Session loaded. Reconnect calendar or re-authenticate if events don't appear or actions fail." });
+           // Try fetching anyway, flow will handle missing/stale token by returning requires_authentication
+          fetchCalendarEventsWithToken(user.uid, undefined);
         }
       } else {
-        fetchCalendarEvents(undefined, undefined); // User is signed out
-        sessionStorage.removeItem(`firebase_oauth_token_current_user`); // Clear any stored token
+        setEventsData({ status: "requires_authentication", message: "User not signed in."});
+        sessionStorage.removeItem('firebase_oauth_token_current_user_id'); 
       }
     });
     return () => unsubscribe();
@@ -119,26 +95,20 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
     setAuthError(null);
     setError(null); 
     const provider = new GoogleAuthProvider();
-    // Request scopes for Google Calendar
-    provider.addScope('https://www.googleapis.com/auth/calendar.readonly');
-    provider.addScope('https://www.googleapis.com/auth/calendar.events.readonly');
+    // Request full read/write scopes for Google Calendar
+    provider.addScope('https://www.googleapis.com/auth/calendar.events'); // Read and Write
     
     try {
       const result = await signInWithPopup(auth, provider);
       const credential = GoogleAuthProvider.credentialFromResult(result);
       if (credential && credential.accessToken) {
         const token = credential.accessToken;
-        // Store token (e.g., in state, or for simplicity, session storage for this example)
-        // NB: Session storage is not secure for refresh tokens or long-lived tokens in a real app.
-        // This is a short-lived access token.
         sessionStorage.setItem(`firebase_oauth_token_${result.user.uid}`, token);
-        sessionStorage.setItem('firebase_oauth_token_current_user', result.user.uid); // track who it belongs to
+        sessionStorage.setItem('firebase_oauth_token_current_user_id', result.user.uid);
 
-        // onAuthStateChanged will trigger and use this token
-        // For immediate fetch after sign-in:
         if (result.user) {
-            setCurrentUser(result.user); // Update current user immediately
-            fetchCalendarEvents(result.user.uid, token);
+            setCurrentUser(result.user);
+            fetchCalendarEventsWithToken(result.user.uid, token);
         }
       } else {
         throw new Error("No access token received from Google Sign-In.");
@@ -147,8 +117,9 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
       console.error("Error during sign-in:", error);
       setAuthError(error.message || "Failed to sign in with Google.");
       setCurrentUser(null); 
+      sessionStorage.removeItem('firebase_oauth_token_current_user_id');
+    } finally {
       setIsLoadingAuth(false);
-      sessionStorage.removeItem('firebase_oauth_token_current_user');
     }
   };
 
@@ -156,14 +127,14 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
     setIsLoadingAuth(true); 
     setAuthError(null);
     setError(null);
-    const currentTokenUserId = sessionStorage.getItem('firebase_oauth_token_current_user');
+    const currentTokenUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id');
     if (currentTokenUserId) {
         sessionStorage.removeItem(`firebase_oauth_token_${currentTokenUserId}`);
     }
-    sessionStorage.removeItem('firebase_oauth_token_current_user');
+    sessionStorage.removeItem('firebase_oauth_token_current_user_id');
     try {
       await signOut(auth);
-      // onAuthStateChanged will set currentUser to null and fetchCalendarEvents(undefined) will clear events.
+      // onAuthStateChanged will set currentUser to null and clear eventsData.
     } catch (error: any) {
       console.error("Error during sign-out:", error);
       setAuthError(error.message || "Failed to sign out.");
@@ -175,7 +146,7 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
 
   return (
     <WidgetCard title="Chrono-Stream // Calendar" icon={<CalendarDays />} className={className}>
-      {isLoadingAuth && !currentUser && ( // Show authenticating only if no user yet
+      {isLoadingAuth && !currentUser && (
         <div className="flex flex-col items-center justify-center h-full min-h-[150px]">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="mt-2 text-muted-foreground">Authenticating...</p>
@@ -185,7 +156,7 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
       {!isLoadingAuth && !currentUser && (
         <div className="flex flex-col items-center justify-center h-full min-h-[150px] text-center">
           <Link className="h-10 w-10 text-primary mb-3" />
-          <p className="text-muted-foreground mb-4">Connect your Google Calendar to view upcoming events.</p>
+          <p className="text-muted-foreground mb-4">Connect your Google Calendar to view and manage events via AI.</p>
           <Button onClick={handleSignIn} className="bg-primary hover:bg-primary/80 text-primary-foreground">
             <UserCircle className="mr-2" /> Connect Google Calendar
           </Button>
@@ -208,17 +179,16 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
           {isLoading && (
             <div className="flex flex-col items-center justify-center h-full min-h-[100px]">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="mt-2 text-muted-foreground">Loading real calendar events...</p>
+              <p className="mt-2 text-muted-foreground">Loading calendar events...</p>
             </div>
           )}
-          {/* Display operational error or requires_authentication message from eventsData */}
           {!isLoading && (eventsData?.status === "error" || eventsData?.status === "requires_authentication") && (
             <div className="flex flex-col items-center justify-center h-full min-h-[100px] text-center">
               <AlertTriangle className="h-8 w-8 text-destructive mb-2" />
               <p className="text-destructive">
                 {eventsData.status === "error" ? eventsData.errorMessage : eventsData.message}
               </p>
-              {eventsData.status === "requires_authentication" && !sessionStorage.getItem(`firebase_oauth_token_${currentUser.uid}`) &&
+              {(eventsData.status === "requires_authentication") &&
                 <Button onClick={handleSignIn} variant="link" className="mt-2">Re-authenticate Google Calendar</Button>
               }
             </div>
@@ -249,4 +219,3 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
 };
 
 export default CalendarWidget;
-    
