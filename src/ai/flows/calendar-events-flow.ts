@@ -60,9 +60,9 @@ export type CalendarActionStatus = z.infer<typeof CalendarActionStatusSchema>;
 // 1. Get Calendar Events
 // ========================
 const GetCalendarEventsInputSchema = BaseEventInputSchema.extend({
-   userId: z.string().optional().describe('The ID of the user (for logging/context).'), 
+   userId: z.string().optional().describe('The ID of the user (for logging/context).'),
    timeMin: z.string().datetime().optional().describe("The minimum start time for events to filter by (ISO 8601 format). Defaults to now if not provided."),
-   maxResults: z.number().optional().default(10).describe("Maximum number of events to return."),
+   maxResults: z.number().int().min(1).optional().default(10).describe("Maximum number of events to return."),
 });
 export type GetCalendarEventsInput = z.infer<typeof GetCalendarEventsInputSchema>;
 
@@ -98,7 +98,14 @@ export const getActualCalendarEventsTool = ai.defineTool(
     }
     try {
       const timeMin = input.timeMin || new Date().toISOString();
-      const apiUrl = `https://www.googleapis.com/calendar/v3/calendars/${input.calendarId}/events?timeMin=${encodeURIComponent(timeMin)}&orderBy=startTime&singleEvents=true&maxResults=${input.maxResults}`;
+      // Safeguard maxResults to ensure it's a valid number. Zod's .default(10) should handle omissions.
+      // This explicitly ensures that if input.maxResults is somehow not a number (e.g. undefined, NaN),
+      // we use a sane default for the API call.
+      const finalMaxResults = (typeof input.maxResults === 'number' && !isNaN(input.maxResults) && input.maxResults > 0)
+                                ? input.maxResults
+                                : 10;
+
+      const apiUrl = `https://www.googleapis.com/calendar/v3/calendars/${input.calendarId}/events?timeMin=${encodeURIComponent(timeMin)}&orderBy=startTime&singleEvents=true&maxResults=${finalMaxResults}`;
       
       const response = await fetch(apiUrl, {
         headers: { 'Authorization': `Bearer ${input.oauthToken}` },
