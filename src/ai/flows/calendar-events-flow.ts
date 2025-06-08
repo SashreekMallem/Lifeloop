@@ -64,7 +64,7 @@ export type CalendarActionStatus = z.infer<typeof CalendarActionStatusSchema>;
 // 1. Get Calendar Events
 // ========================
 const GetCalendarEventsInputSchema = BaseEventInputSchema.extend({
-   userId: z.string().optional().describe('The ID of the user (for logging/context).'),
+   userId: z.string().optional().describe('The ID of the user (for logging/context).'), // Though AI is instructed not to send this
    timeMin: z.string().datetime().optional().describe("The minimum start time for events to filter by (ISO 8601 format). Defaults to now if not provided."),
    maxResults: z.number().int().min(1).optional().default(10).describe("Maximum number of events to return."),
 });
@@ -89,7 +89,7 @@ export type GetCalendarEventsOutput = z.infer<typeof GetCalendarEventsOutputSche
 export const getActualCalendarEventsTool = ai.defineTool(
   {
     name: 'getActualCalendarEventsTool',
-    description: 'Fetches actual calendar events for a user from Google Calendar API using an OAuth token.',
+    description: 'Fetches actual calendar events for a user from Google Calendar API using an OAuth token. For general queries (e.g., "my schedule today"), omit timeMin to get events from now. For specific date ranges, timeMin must be a valid ISO 8601 string.',
     inputSchema: GetCalendarEventsInputSchema,
     outputSchema: GetCalendarEventsOutputSchema,
   },
@@ -104,7 +104,7 @@ export const getActualCalendarEventsTool = ai.defineTool(
     }
     try {
       const calendarIdToUse = (input.calendarId && input.calendarId.trim() !== '') ? input.calendarId.trim() : 'primary';
-      const timeMin = input.timeMin || new Date().toISOString();
+      const timeMin = input.timeMin || new Date().toISOString(); // Default to now if timeMin is omitted by AI/caller
       const finalMaxResults = (typeof input.maxResults === 'number' && !isNaN(input.maxResults) && input.maxResults > 0)
                                 ? input.maxResults
                                 : 10;
@@ -116,10 +116,18 @@ export const getActualCalendarEventsTool = ai.defineTool(
         headers: { 'Authorization': `Bearer ${input.oauthToken}` },
       });
       console.log(`[getActualCalendarEventsTool] API Response Status: ${response.status} ${response.statusText}`);
+      const responseText = await response.text(); // Get raw text first for logging
+      console.log("[getActualCalendarEventsTool] API Response (raw text):", responseText);
+
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: "Unknown API error, response not JSON." }));
-        console.error("[getActualCalendarEventsTool] API request failed. Error data:", JSON.stringify(errorData));
+        let errorData: any;
+        try {
+          errorData = JSON.parse(responseText);
+        } catch (e) {
+          errorData = { message: "Unknown API error, response not JSON.", details: responseText };
+        }
+        console.error("[getActualCalendarEventsTool] API request failed. Parsed error data:", JSON.stringify(errorData));
         if (response.status === 401 || response.status === 403) {
             return {
                 status: "requires_authentication",
@@ -131,8 +139,16 @@ export const getActualCalendarEventsTool = ai.defineTool(
           errorMessage: `Google Calendar API request failed (Status ${response.status}). Details: ${errorData.error?.message || JSON.stringify(errorData)}`,
         };
       }
-      const data = await response.json();
-      console.log("[getActualCalendarEventsTool] API Response Data (raw):", JSON.stringify(data));
+
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        console.error("[getActualCalendarEventsTool] Failed to parse API JSON response:", e);
+        return { status: "error", errorMessage: "Failed to parse calendar data from Google." };
+      }
+      
+      console.log("[getActualCalendarEventsTool] API Response Data (parsed JSON):", JSON.stringify(data));
       const items = data.items || [];
       const mappedEvents = items.map((item: any) => {
         let startValue: string | undefined = undefined;
@@ -174,7 +190,7 @@ export const getActualCalendarEventsTool = ai.defineTool(
       return { status: "success", events };
 
     } catch (error: any) {
-      console.error("[getActualCalendarEventsTool] Error processing calendar events:", error);
+      console.error("[getActualCalendarEventsTool] Unhandled error processing calendar events:", error);
       return { status: "error", errorMessage: `Failed to process calendar events: ${error.message || "Unexpected error."}` };
     }
   }
@@ -248,8 +264,9 @@ export const addCalendarEventTool = ai.defineTool(
         },
         body: JSON.stringify(googleEvent),
       });
-      const responseData = await response.json().catch(() => ({}));
-      console.log(`[addCalendarEventTool] API Response Status: ${response.status}`, JSON.stringify(responseData));
+      const responseDataText = await response.text();
+      console.log(`[addCalendarEventTool] API Response Status: ${response.status}`, responseDataText);
+      const responseData = JSON.parse(responseDataText || '{}'); // Handle potentially empty response
 
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) return { status: "requires_authentication", message: `API Auth Error (Status ${response.status}): ${responseData.error?.message}` };
@@ -267,7 +284,7 @@ export const addCalendarEventTool = ai.defineTool(
 
       return { status: "success", eventId: responseData.id, message: "Event created successfully.", event: createdEvent };
     } catch (error: any) {
-      console.error("[addCalendarEventTool] Error:", error);
+      console.error("[addCalendarEventTool] Unhandled error:", error);
       return { status: "error", errorMessage: `Failed to add event: ${error.message}` };
     }
   }
@@ -347,8 +364,9 @@ export const editCalendarEventTool = ai.defineTool(
         },
         body: JSON.stringify(googleUpdates),
       });
-      const responseData = await response.json().catch(() => ({}));
-      console.log(`[editCalendarEventTool] API Response Status: ${response.status}`, JSON.stringify(responseData));
+      const responseDataText = await response.text();
+      console.log(`[editCalendarEventTool] API Response Status: ${response.status}`, responseDataText);
+      const responseData = JSON.parse(responseDataText || '{}');
       
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) return { status: "requires_authentication", message: `API Auth Error (Status ${response.status}): ${responseData.error?.message}` };
@@ -365,7 +383,7 @@ export const editCalendarEventTool = ai.defineTool(
       };
       return { status: "success", eventId: responseData.id, message: "Event updated successfully.", event: updatedEvent };
     } catch (error: any) {
-      console.error("[editCalendarEventTool] Error:", error);
+      console.error("[editCalendarEventTool] Unhandled error:", error);
       return { status: "error", errorMessage: `Failed to edit event: ${error.message}` };
     }
   }
@@ -413,16 +431,22 @@ export const deleteCalendarEventTool = ai.defineTool(
         headers: { 'Authorization': `Bearer ${oauthToken}` },
       });
       console.log(`[deleteCalendarEventTool] API Response Status: ${response.status} ${response.statusText}`);
+      const responseText = await response.text(); // Get text for potential error details
 
       if (!response.ok && response.status !== 204) { // 204 No Content is success for DELETE
-        const errorData = await response.json().catch(() => ({}));
+        let errorData: any;
+        try {
+            errorData = JSON.parse(responseText);
+        } catch (e) {
+            errorData = { message: "Failed to parse error response from API.", details: responseText };
+        }
         console.error("[deleteCalendarEventTool] API Error data:", JSON.stringify(errorData));
         if (response.status === 401 || response.status === 403) return { status: "requires_authentication", message: `API Auth Error (Status ${response.status}): ${errorData.error?.message}` };
         return { status: "error", errorMessage: `API Error (Status ${response.status}): ${errorData.error?.message || 'Failed to delete event'}` };
       }
       return { status: "success", eventId: eventId, message: "Event deleted successfully." };
     } catch (error: any) {
-      console.error("[deleteCalendarEventTool] Error:", error);
+      console.error("[deleteCalendarEventTool] Unhandled error:", error);
       return { status: "error", errorMessage: `Failed to delete event: ${error.message}` };
     }
   }
