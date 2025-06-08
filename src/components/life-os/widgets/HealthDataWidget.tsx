@@ -30,6 +30,7 @@ const HealthDataWidget = ({ className }: HealthDataWidgetProps) => {
 
     if (!userId || !token) {
       setDataError("User not signed in or OAuth token unavailable for Google Fit.");
+      setHealthData(null); // Clear old data
       setIsLoadingData(false);
       return;
     }
@@ -87,7 +88,7 @@ const HealthDataWidget = ({ className }: HealthDataWidgetProps) => {
           }, 100);
         }
       } else { // User is signed out
-        setDataError("User not signed in.");
+        setDataError("User not signed in to view health data.");
         setHealthData(null);
         const currentTokenUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id_fit');
         if (currentTokenUserId) {
@@ -109,10 +110,9 @@ const HealthDataWidget = ({ className }: HealthDataWidgetProps) => {
     setDataError(null);
     setHealthData(null); 
     const provider = new GoogleAuthProvider();
-    // Add Google Fit scopes
-    provider.addScope('https://www.googleapis.com/auth/fitness.activity.read'); // For steps, active time
-    provider.addScope('https://www.googleapis.com/auth/fitness.sleep.read');   // For sleep
-    // provider.addScope('https://www.googleapis.com/auth/fitness.heart_rate.read'); // For heart rate (future)
+    provider.addScope('https://www.googleapis.com/auth/fitness.activity.read');
+    provider.addScope('https://www.googleapis.com/auth/fitness.sleep.read');
+    provider.addScope('https://www.googleapis.com/auth/fitness.heart_rate.read'); // Added heart rate scope
     
     try {
       const result = await signInWithPopup(auth, provider);
@@ -121,7 +121,7 @@ const HealthDataWidget = ({ className }: HealthDataWidgetProps) => {
         const token = credential.accessToken;
         sessionStorage.setItem(`firebase_oauth_token_${result.user.uid}_fit`, token);
         sessionStorage.setItem('firebase_oauth_token_current_user_id_fit', result.user.uid);
-        // onAuthStateChanged will handle fetching data
+        // onAuthStateChanged will handle fetching data because currentUser state changes
       } else {
         throw new Error("No access token received from Google Sign-In for Fit.");
       }
@@ -133,6 +133,7 @@ const HealthDataWidget = ({ className }: HealthDataWidgetProps) => {
           sessionStorage.removeItem(`firebase_oauth_token_${currentTokenUserId}_fit`);
       }
       sessionStorage.removeItem('firebase_oauth_token_current_user_id_fit');
+      setIsLoadingAuth(false); // Ensure loading state is reset on error
     }
   };
 
@@ -145,21 +146,24 @@ const HealthDataWidget = ({ className }: HealthDataWidgetProps) => {
         sessionStorage.removeItem(`firebase_oauth_token_${currentTokenUserId}_fit`);
     }
     sessionStorage.removeItem('firebase_oauth_token_current_user_id_fit');
-    // We don't sign out from Firebase itself here, just clear the Fit token
-    // If you want full sign out: await signOut(auth);
-    // For now, just "disconnect" Fit by clearing its token and data
-    setCurrentUser(null); // Force re-render to show sign-in prompt
-    setIsLoadingAuth(false); // Ensure auth loading stops
+    
+    // To reflect immediate disconnection for Fit, explicitly set currentUser to null
+    // and set appropriate messages, then onAuthStateChanged will confirm.
+    // This provides a faster UI update for the "disconnect" action.
+    setCurrentUser(null); 
+    setIsLoadingAuth(false);
     setDataError("Disconnected from Google Fit. Please connect to see data.");
 
-    // To truly re-trigger onAuthStateChanged for a full Firebase sign-out (if that was intended):
-    // await signOut(auth); 
-    // However, the current Calendar widget model is to disconnect specific services, not full app logout.
-    // So, we simulate a disconnect for Fit.
+    // Optionally, if you want to trigger a full Firebase sign-out (which affects all services):
+    // await signOut(auth);
+    // For now, we only clear Fit-specific session data and UI state.
   };
 
   const steps = healthData?.status === "success" ? (healthData.steps ?? 'N/A') : 'N/A';
   const sleepMinutes = healthData?.status === "success" ? healthData.sleepDurationMinutes : null;
+  const activeMinutes = healthData?.status === "success" ? (healthData.activeMinutes ?? 'N/A') : 'N/A';
+  const heartRateBpm = healthData?.status === "success" ? (healthData.heartRateBpm ?? 'N/A') : 'N/A';
+  
   let sleepFormatted = 'N/A';
   if (typeof sleepMinutes === 'number') {
     const hours = Math.floor(sleepMinutes / 60);
@@ -171,7 +175,7 @@ const HealthDataWidget = ({ className }: HealthDataWidgetProps) => {
 
 
   return (
-    <WidgetCard title="Biometric Feed // Vital Signs (via Google Fit)" icon={<HeartPulse />} className={className}>
+    <WidgetCard title="Biometric Feed // Vital Signs (Google Fit)" icon={<HeartPulse />} className={className}>
       {isLoadingAuth && ( 
         <div className="flex flex-col items-center justify-center h-full min-h-[150px]">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -182,7 +186,7 @@ const HealthDataWidget = ({ className }: HealthDataWidgetProps) => {
       {!isLoadingAuth && !currentUser && (
         <div className="flex flex-col items-center justify-center h-full min-h-[150px] text-center">
           <LinkIcon className="h-10 w-10 text-primary mb-3" />
-          <p className="text-muted-foreground mb-4">Connect Google Fit to view your activity and sleep data.</p>
+          <p className="text-muted-foreground mb-4">Connect Google Fit to view your activity, sleep, and heart rate data.</p>
           <Button onClick={handleSignInFit} className="bg-primary hover:bg-primary/80 text-primary-foreground">
             <UserCircle className="mr-2" /> Connect Google Fit
           </Button>
@@ -193,7 +197,7 @@ const HealthDataWidget = ({ className }: HealthDataWidgetProps) => {
       {!isLoadingAuth && currentUser && (
         <>
           <div className="flex justify-between items-center mb-3">
-            <p className="text-xs text-green-400 truncate max-w-[calc(100%-80px)]" title={`Connected for Fit: ${currentUser.displayName || currentUser.email || "User"}`}>
+            <p className="text-xs text-green-400 truncate max-w-[calc(100%-110px)]" title={`Connected for Fit: ${currentUser.displayName || currentUser.email || "User"}`}>
               Fit Connected: {currentUser.displayName || currentUser.email}
             </p>
             <Button onClick={handleSignOutFit} variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive flex-shrink-0">
@@ -215,34 +219,33 @@ const HealthDataWidget = ({ className }: HealthDataWidgetProps) => {
               <p className="text-destructive text-sm p-2 bg-destructive/10 rounded-md">
                 {dataError}
               </p>
-              {(dataError.includes("OAuth token") || dataError.includes("authentication")) &&
+              {(dataError.includes("OAuth token") || dataError.includes("authentication") || dataError.includes("expired")) &&
                 <Button onClick={handleSignInFit} variant="link" className="mt-2 text-sm">Re-authenticate Google Fit</Button>
               }
             </div>
           )}
           
           {!isLoadingData && !dataError && healthData?.status === 'success' && (
-            <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
-              <div className="glassmorphic p-3 rounded-lg text-center border border-primary/10 hover:border-primary/30 transition-all">
-                <div className="mx-auto h-8 w-8 flex items-center justify-center mb-1 opacity-80"><Footprints className="text-primary" /></div>
-                <p className="font-semibold text-lg text-foreground/90">{steps}</p>
-                <p className="text-xs text-muted-foreground">Steps Today</p>
+            <div className="grid grid-cols-2 md:grid-cols-2 gap-3">
+              <div className="glassmorphic p-2.5 rounded-lg text-center border border-primary/10 hover:border-primary/30 transition-all">
+                <div className="mx-auto h-7 w-7 flex items-center justify-center mb-0.5 opacity-80"><Footprints className="text-primary" /></div>
+                <p className="font-semibold text-md text-foreground/90">{steps}</p>
+                <p className="text-xs text-muted-foreground">Steps</p>
               </div>
-              <div className="glassmorphic p-3 rounded-lg text-center border border-primary/10 hover:border-primary/30 transition-all">
-                <div className="mx-auto h-8 w-8 flex items-center justify-center mb-1 opacity-80"><BedDouble className="text-secondary" /></div>
-                <p className="font-semibold text-lg text-foreground/90">{sleepFormatted}</p>
-                <p className="text-xs text-muted-foreground">Last Sleep</p>
+              <div className="glassmorphic p-2.5 rounded-lg text-center border border-primary/10 hover:border-primary/30 transition-all">
+                <div className="mx-auto h-7 w-7 flex items-center justify-center mb-0.5 opacity-80"><BedDouble className="text-secondary" /></div>
+                <p className="font-semibold text-md text-foreground/90">{sleepFormatted}</p>
+                <p className="text-xs text-muted-foreground">Sleep</p>
               </div>
-              {/* Placeholder for Heart Rate & Activity - implement fetching for these next */}
-              <div className="glassmorphic p-3 rounded-lg text-center border border-primary/10 opacity-50">
-                <div className="mx-auto h-8 w-8 flex items-center justify-center mb-1"><HeartPulse className="text-red-400" /></div>
-                <p className="font-semibold text-lg">N/A</p>
-                <p className="text-xs">Heart Rate</p>
+              <div className="glassmorphic p-2.5 rounded-lg text-center border border-primary/10 hover:border-primary/30 transition-all">
+                <div className="mx-auto h-7 w-7 flex items-center justify-center mb-0.5 opacity-80"><HeartPulse className="text-red-400" /></div>
+                <p className="font-semibold text-md text-foreground/90">{heartRateBpm}{typeof heartRateBpm === 'number' ? <span className="text-xs"> bpm</span> : ''}</p>
+                <p className="text-xs text-muted-foreground">Heart Rate</p>
               </div>
-              <div className="glassmorphic p-3 rounded-lg text-center border border-primary/10 opacity-50">
-                <div className="mx-auto h-8 w-8 flex items-center justify-center mb-1"><Activity className="text-green-400" /></div>
-                <p className="font-semibold text-lg">N/A</p>
-                <p className="text-xs">Active Time</p>
+              <div className="glassmorphic p-2.5 rounded-lg text-center border border-primary/10 hover:border-primary/30 transition-all">
+                <div className="mx-auto h-7 w-7 flex items-center justify-center mb-0.5 opacity-80"><Activity className="text-green-400" /></div>
+                <p className="font-semibold text-md text-foreground/90">{activeMinutes}{typeof activeMinutes === 'number' ? <span className="text-xs"> min</span> : ''}</p>
+                <p className="text-xs text-muted-foreground">Active Time</p>
               </div>
             </div>
           )}
@@ -254,10 +257,10 @@ const HealthDataWidget = ({ className }: HealthDataWidgetProps) => {
              </div>
            )}
 
-          <div className="mt-4 pt-3 border-t border-primary/10 text-center">
+          <div className="mt-3 pt-2.5 border-t border-primary/10 text-center">
             <p className="text-xs text-muted-foreground/80 flex items-center justify-center gap-1.5">
-              <Smartphone size={14} />
-              <span>Apple Health data can be synced via Google Fit on your iPhone.</span>
+              <Smartphone size={13} />
+              <span>Apple Health data via Google Fit sync on iPhone.</span>
             </p>
           </div>
         </>
@@ -267,3 +270,5 @@ const HealthDataWidget = ({ className }: HealthDataWidgetProps) => {
 };
 
 export default HealthDataWidget;
+
+    
