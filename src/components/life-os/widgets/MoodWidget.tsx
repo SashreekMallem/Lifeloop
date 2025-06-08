@@ -10,22 +10,46 @@ interface MoodWidgetProps {
   className?: string;
 }
 
+const sampleInputs: DetectMoodInput[] = [
+  {
+    sleepData: "Slept for 7.5 hours, fairly restful, woke up once.",
+    activityData: "Morning run 5km, moderate heart rate. Afternoon desk work.",
+    calendarEvents: "Team sync at 10 AM, Project deadline review at 3 PM."
+  },
+  {
+    sleepData: "Only 5 hours of broken sleep, feeling tired.",
+    activityData: "No significant activity, mostly sedentary.",
+    calendarEvents: "Multiple urgent meetings, critical bug report received."
+  },
+  {
+    sleepData: "8 hours of deep sleep, woke up refreshed.",
+    activityData: "Yoga session in the morning, light walk in the evening.",
+    calendarEvents: "Client presentation went well. Quiet evening planned."
+  },
+  {
+    sleepData: "6 hours, tossed and turned a bit.",
+    activityData: "Missed workout, feeling a bit sluggish.",
+    calendarEvents: "No major events, routine tasks."
+  }
+];
+
+
 const MoodWidget = ({ className }: MoodWidgetProps) => {
   const [moodData, setMoodData] = useState<DetectMoodOutput | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentSampleInput, setCurrentSampleInput] = useState<DetectMoodInput | null>(null);
 
   useEffect(() => {
-    const fetchMood = async () => {
+    // Select a random sample input on mount
+    const randomIndex = Math.floor(Math.random() * sampleInputs.length);
+    const selectedInput = sampleInputs[randomIndex];
+    setCurrentSampleInput(selectedInput);
+
+    const fetchMood = async (input: DetectMoodInput) => {
       setIsLoading(true);
       setError(null);
       try {
-        // Use placeholder or empty inputs for the flow
-        const input: DetectMoodInput = {
-          sleepData: "",      // Placeholder, to be replaced by real data source
-          activityData: "",   // Placeholder, to be replaced by real data source
-          calendarEvents: ""  // Placeholder, to be replaced by real data source
-        };
         const result = await detectMood(input);
         setMoodData(result);
       } catch (err) {
@@ -36,18 +60,18 @@ const MoodWidget = ({ className }: MoodWidgetProps) => {
       }
     };
 
-    fetchMood();
+    fetchMood(selectedInput);
   }, []);
 
   const getMoodVisuals = (mood?: string) => {
     const lowerCaseMood = mood?.toLowerCase() || "unknown";
-    if (lowerCaseMood.includes("positive") || lowerCaseMood.includes("happy") || lowerCaseMood.includes("optimized") || lowerCaseMood.includes("energized") || lowerCaseMood.includes("calm")) {
+    if (lowerCaseMood.includes("positive") || lowerCaseMood.includes("happy") || lowerCaseMood.includes("optimized") || lowerCaseMood.includes("energized") || lowerCaseMood.includes("calm") || lowerCaseMood.includes("good")) {
       return { icon: <Smile className="h-12 w-12 text-green-400 mb-2 group-hover:scale-110 transition-transform" />, color: "text-green-400" };
     }
-    if (lowerCaseMood.includes("negative") || lowerCaseMood.includes("sad") || lowerCaseMood.includes("stressed")) {
+    if (lowerCaseMood.includes("negative") || lowerCaseMood.includes("sad") || lowerCaseMood.includes("stressed") || lowerCaseMood.includes("tired")) {
       return { icon: <Frown className="h-12 w-12 text-red-400 mb-2 group-hover:scale-110 transition-transform" />, color: "text-red-400" };
     }
-    if (lowerCaseMood.includes("neutral") || lowerCaseMood.includes("moderate")) {
+    if (lowerCaseMood.includes("neutral") || lowerCaseMood.includes("moderate") || lowerCaseMood.includes("okay")) {
       return { icon: <Meh className="h-12 w-12 text-yellow-400 mb-2 group-hover:scale-110 transition-transform" />, color: "text-yellow-400" };
     }
     return { icon: <BrainCircuit className="h-12 w-12 text-primary mb-2 group-hover:scale-110 transition-transform" />, color: "text-primary" }; // Default/Unknown
@@ -61,6 +85,7 @@ const MoodWidget = ({ className }: MoodWidgetProps) => {
         <div className="flex flex-col items-center justify-center h-full min-h-[150px]">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="mt-2 text-muted-foreground">Analyzing sentiment data...</p>
+           {currentSampleInput && <p className="text-xs text-muted-foreground/50 mt-1">Based on simulated data...</p>}
         </div>
       )}
       {error && !isLoading && (

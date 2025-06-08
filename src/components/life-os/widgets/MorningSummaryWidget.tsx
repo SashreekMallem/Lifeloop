@@ -10,6 +10,24 @@ interface MorningSummaryWidgetProps {
   className?: string;
 }
 
+const sampleInputs: MorningSummaryInput[] = [
+  {
+    calendarEvents: "Today: 10 AM Project Alpha sync, 2 PM Client Demo. Tomorrow: Team workshop.",
+    healthData: "Sleep: 7h 30m (Good), Steps: 8,500 (Active), Heart Rate: Resting 62bpm.",
+    otherAppData: "Tasks: 3 high-priority tasks due. Weather: Sunny, 24°C. News: Tech stocks rally."
+  },
+  {
+    calendarEvents: "Light schedule today. Dentist appointment at 4 PM.",
+    healthData: "Sleep: 6h (Restless), Steps: 2,100 (Low), Heart Rate: Resting 70bpm.",
+    otherAppData: "Tasks: 1 overdue task. Weather: Cloudy with chance of rain. Focus Mode: Scheduled for 2 hours this afternoon."
+  },
+  {
+    calendarEvents: "Packed day: Morning marathon of meetings (9 AM - 1 PM), followed by an evening networking event.",
+    healthData: "Sleep: 8h (Excellent), Steps: 12,000 (Very Active), Heart Rate: Resting 58bpm.",
+    otherAppData: "Tasks: All caught up! Weather: Clear skies, perfect for the event. Reminders: Pick up dry cleaning."
+  }
+];
+
 const MorningSummaryWidget = ({ className }: MorningSummaryWidgetProps) => {
   const [summaryData, setSummaryData] = useState<MorningSummaryOutput | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -20,12 +38,8 @@ const MorningSummaryWidget = ({ className }: MorningSummaryWidgetProps) => {
       setIsLoading(true);
       setError(null);
       try {
-        // Use placeholder or empty inputs for the flow
-        const input: MorningSummaryInput = {
-          calendarEvents: "", // Placeholder, to be replaced by real data source
-          healthData: "",     // Placeholder, to be replaced by real data source
-          otherAppData: ""    // Placeholder, to be replaced by real data source
-        };
+        const randomIndex = Math.floor(Math.random() * sampleInputs.length);
+        const input = sampleInputs[randomIndex];
         const result = await generateMorningSummary(input);
         setSummaryData(result);
       } catch (err) {

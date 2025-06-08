@@ -11,6 +11,25 @@ interface IntelligentSuggestionsWidgetProps {
   className?: string;
 }
 
+const sampleInputs: SuggestInput[] = [
+  {
+    expiringIngredients: ["Chicken breast", "Broccoli", "Lemon"],
+    historicalContacts: ["Dr. Aris Thorne (last contacted 2 months ago - research collaboration)", "Maya Lin (last contacted 3 weeks ago - project update)"],
+    userPreferences: "Prefers healthy, quick meals. Interested in reconnecting with professional contacts for potential collaborations."
+  },
+  {
+    expiringIngredients: ["Tofu", "Spinach", "Mushrooms"],
+    historicalContacts: ["Alex Chen (last contacted 1 week ago - casual check-in)", "Sarah Miller (last contacted 4 months ago - old colleague)"],
+    userPreferences: "Vegetarian, enjoys trying new recipes. Needs to follow up with recent contacts and consider reaching out to long-lost connections."
+  },
+  {
+    expiringIngredients: [],
+    historicalContacts: ["John Doe (last contacted 5 days ago - pending task)"],
+    userPreferences: "User is focused on task completion and might not be looking for new recipes or extensive social outreach today."
+  }
+];
+
+
 const IntelligentSuggestionsWidget = ({ className }: IntelligentSuggestionsWidgetProps) => {
   const [suggestions, setSuggestions] = useState<SuggestOutput | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -21,12 +40,8 @@ const IntelligentSuggestionsWidget = ({ className }: IntelligentSuggestionsWidge
       setIsLoading(true);
       setError(null);
       try {
-        // Use placeholder or empty inputs for the flow
-        const input: SuggestInput = {
-          expiringIngredients: [], // Placeholder, to be replaced by real data source
-          historicalContacts: [],  // Placeholder, to be replaced by real data source
-          userPreferences: ""      // Placeholder, to be replaced by real data source
-        };
+        const randomIndex = Math.floor(Math.random() * sampleInputs.length);
+        const input = sampleInputs[randomIndex];
         const result = await suggest(input);
         setSuggestions(result);
       } catch (err) {
@@ -63,7 +78,6 @@ const IntelligentSuggestionsWidget = ({ className }: IntelligentSuggestionsWidge
                 <h4 className="font-medium text-base text-foreground/90">Recipe Idea</h4>
               </div>
               <p className="text-sm text-muted-foreground mb-2">{suggestions.recipeSuggestion}</p>
-              {/* <Button variant="outline" size="sm" className="glassmorphic hover:border-primary hover:text-primary text-xs">View Recipe</Button> */}
             </div>
           )}
           {suggestions.contactSuggestion && (
@@ -73,7 +87,6 @@ const IntelligentSuggestionsWidget = ({ className }: IntelligentSuggestionsWidge
                 <h4 className="font-medium text-base text-foreground/90">Connection Prompt</h4>
               </div>
               <p className="text-sm text-muted-foreground mb-2">{suggestions.contactSuggestion}</p>
-              {/* <Button variant="outline" size="sm" className="glassmorphic hover:border-primary hover:text-primary text-xs">Initiate Comms</Button> */}
             </div>
           )}
           {!suggestions.recipeSuggestion && !suggestions.contactSuggestion && (
