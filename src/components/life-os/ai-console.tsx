@@ -16,11 +16,12 @@ const AiConsole = () => {
   const [messages, setMessages] = useState<{id: string, sender: string, text: string}[]>([]);
   const [isAiResponding, setIsAiResponding] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  // This currentUser state is for UI purposes or general checks, but for critical operations like token retrieval, we'll use auth.currentUser directly.
+  const [consoleCurrentUser, setConsoleCurrentUser] = useState<User | null>(null);
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(user => {
-      setCurrentUser(user);
+      setConsoleCurrentUser(user);
     });
     return () => unsubscribe();
   }, []);
@@ -41,26 +42,33 @@ const AiConsole = () => {
       setInput('');
       setIsAiResponding(true);
 
-      // Retrieve OAuth token if user is signed in and token exists in session storage
-      // This token is primarily for Google Calendar API interactions via AI
       let oauthToken: string | undefined = undefined;
-      if (currentUser) {
+      const firebaseUser = auth.currentUser; // Get current user directly from Firebase auth instance at the time of send
+
+      if (firebaseUser) {
+        console.log("[AiConsole] Current Firebase User on send:", firebaseUser.uid);
         const storedTokenUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id');
-        if (storedTokenUserId === currentUser.uid) {
-          oauthToken = sessionStorage.getItem(`firebase_oauth_token_${currentUser.uid}`) || undefined;
+        if (storedTokenUserId === firebaseUser.uid) {
+          oauthToken = sessionStorage.getItem(`firebase_oauth_token_${firebaseUser.uid}`) || undefined;
+          console.log("[AiConsole] OAuth Token for user", firebaseUser.uid, oauthToken ? "found in session." : "NOT found in session.");
+        } else {
+          console.warn("[AiConsole] Stored token User ID mismatch. Stored:", storedTokenUserId, "Current Firebase User:", firebaseUser.uid, ". Token will not be used.");
         }
-      }
-      if (oauthToken) {
-        console.log("[AiConsole] Found OAuth token for current user, will pass to chat flow.");
       } else {
-         console.log("[AiConsole] No OAuth token found for current user. Calendar actions might require re-auth.");
+         console.warn("[AiConsole] No Firebase user (auth.currentUser is null) at time of send. Cannot retrieve OAuth token.");
+      }
+      
+      if (!oauthToken) {
+          console.warn("[AiConsole] Proceeding to call chatWithAI without an OAuth token for the AI flow.");
+      } else {
+          console.log("[AiConsole] Passing OAuth token to chatWithAI flow.");
       }
 
       try {
         const aiThinkingMessage = { id: Date.now().toString() + '-ai-thinking', sender: 'ai', text: 'Thinking...' };
         setMessages(prev => [...prev, aiThinkingMessage]);
         
-        const chatInput: ChatInput = { prompt: userMessageText, oauthToken };
+        const chatInput: ChatInput = { prompt: userMessageText, oauthToken }; // oauthToken might be undefined here
         const aiResponse = await chatWithAI(chatInput);
         
         setMessages(prev => prev.filter(msg => msg.id !== aiThinkingMessage.id));
