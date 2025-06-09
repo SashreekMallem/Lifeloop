@@ -1,9 +1,17 @@
+"use client";
 
-'use client';
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import WidgetCard from "./WidgetCard";
-import { Brain, Zap, TrendingDown, Loader2, AlertTriangle, Lightbulb } from "lucide-react";
+import {
+  Brain,
+  Zap,
+  TrendingDown,
+  Loader2,
+  AlertTriangle,
+  Lightbulb,
+  RefreshCw,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
 // Assuming a flow for insights might exist or be created later.
 // For now, we'll show a loading/empty state.
 // import { getPersonalizedInsights, type PersonalizedInsight } from '@/ai/flows/personalized-insights-flow'; // Example import
@@ -44,8 +52,29 @@ const PersonalizedInsightsWidget = ({ className }: PersonalizedInsightsWidgetPro
   //   // fetchInsights(); // Uncomment when ready to fetch
   // }, []);
 
+  const handleRefresh = () => {
+    // Placeholder for future insights refresh functionality
+    console.log("Personalized insights refreshed");
+  };
+
   return (
-    <WidgetCard title="Oracle Engine // Personalized Intel" icon={<Brain />} className={className}>
+    <WidgetCard
+      title="Oracle Engine // Personalized Intel"
+      icon={<Brain />}
+      className={className}
+      showHeader={true}
+      headerActions={
+        <Button 
+          onClick={handleRefresh} 
+          variant="ghost" 
+          size="sm" 
+          className="text-muted-foreground hover:text-primary"
+        >
+          <RefreshCw size={14} className="mr-1" />
+          Refresh
+        </Button>
+      }
+    >
       {isLoading && (
         <div className="flex flex-col items-center justify-center h-full min-h-[150px]">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -73,7 +102,9 @@ const PersonalizedInsightsWidget = ({ className }: PersonalizedInsightsWidgetPro
           {/* Display message if no insights and not loading/error */}
           <div className="flex flex-col items-center justify-center h-full min-h-[150px]">
             <Lightbulb className="h-10 w-10 text-muted-foreground/50 mb-2" />
-            <p className="text-sm text-muted-foreground text-center">No new personalized intel at this time. System is monitoring.</p>
+            <p className="text-sm text-muted-foreground text-center">
+              No new personalized intel at this time. System is monitoring.
+            </p>
           </div>
         </div>
       )}

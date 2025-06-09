@@ -1,9 +1,9 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import WidgetCard from "./WidgetCard";
-import { Sunrise, CalendarCheck, ListTodo, CloudSun, Bed, Loader2, AlertTriangle } from "lucide-react";
+import { Sunrise, CalendarCheck, ListTodo, CloudSun, Bed, Loader2, AlertTriangle, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { generateMorningSummary, type MorningSummaryOutput, type MorningSummaryInput } from '@/ai/flows/morning-summary';
 
 interface MorningSummaryWidgetProps {
@@ -53,8 +53,41 @@ const MorningSummaryWidget = ({ className }: MorningSummaryWidgetProps) => {
     fetchSummary();
   }, []);
 
+  const handleRefresh = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const randomIndex = Math.floor(Math.random() * sampleInputs.length);
+      const input = sampleInputs[randomIndex];
+      const result = await generateMorningSummary(input);
+      setSummaryData(result);
+    } catch (err) {
+      console.error("Error fetching morning summary:", err);
+      setError("Failed to load morning summary. The AI core might be offline.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
-    <WidgetCard title="Morning Transmission // Daily Brief" icon={<Sunrise />} className={className}>
+    <WidgetCard 
+      title="Morning Transmission // Daily Brief" 
+      icon={<Sunrise />} 
+      className={className}
+      showHeader={true}
+      headerActions={
+        <Button 
+          onClick={handleRefresh} 
+          variant="ghost" 
+          size="sm" 
+          className="text-muted-foreground hover:text-primary"
+          disabled={isLoading}
+        >
+          <RefreshCw size={14} className={`mr-1 ${isLoading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
+      }
+    >
       {isLoading && (
         <div className="flex items-center justify-center h-full min-h-[150px]">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -71,7 +104,7 @@ const MorningSummaryWidget = ({ className }: MorningSummaryWidgetProps) => {
       {!isLoading && !error && summaryData && (
         <div className="space-y-3">
           <p className="text-base text-muted-foreground">Initializing daily parameters, Operator.</p>
-          <div className="p-3 rounded-md bg-card/5 border border-primary/10 max-h-[200px] overflow-y-auto scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-transparent">
+          <div className="p-3 rounded-md bg-card/5 border border-primary/10">
             <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-line">{summaryData.summary || "No summary data available at this moment."}</p>
           </div>
         </div>
@@ -82,6 +115,11 @@ const MorningSummaryWidget = ({ className }: MorningSummaryWidgetProps) => {
           <p className="text-muted-foreground">Morning brief not yet available.</p>
         </div>
       )}
+      <div className="absolute top-4 right-4">
+        <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isLoading}>
+          <RefreshCw className="h-5 w-5" />
+        </Button>
+      </div>
     </WidgetCard>
   );
 };

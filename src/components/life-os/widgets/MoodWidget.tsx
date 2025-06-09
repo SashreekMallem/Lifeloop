@@ -1,9 +1,9 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import WidgetCard from "./WidgetCard";
-import { Smile, BrainCircuit, Frown, Meh, Loader2, AlertTriangle } from "lucide-react";
+import { Smile, BrainCircuit, Frown, Meh, Loader2, AlertTriangle, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { detectMood, type DetectMoodOutput, type DetectMoodInput } from '@/ai/flows/mood-detection';
 
 interface MoodWidgetProps {
@@ -63,6 +63,21 @@ const MoodWidget = ({ className }: MoodWidgetProps) => {
     fetchMood(selectedInput);
   }, []);
 
+  const handleRefresh = async () => {
+    const selectedInput = sampleInputs[Math.floor(Math.random() * sampleInputs.length)];
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await detectMood(selectedInput);
+      setMoodData(result);
+    } catch (err) {
+      console.error("Error fetching mood data:", err);
+      setError("Failed to analyze affective state. AI core might be experiencing fluctuations.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const getMoodVisuals = (mood?: string) => {
     const lowerCaseMood = mood?.toLowerCase() || "unknown";
     if (lowerCaseMood.includes("positive") || lowerCaseMood.includes("happy") || lowerCaseMood.includes("optimized") || lowerCaseMood.includes("energized") || lowerCaseMood.includes("calm") || lowerCaseMood.includes("good")) {
@@ -80,7 +95,24 @@ const MoodWidget = ({ className }: MoodWidgetProps) => {
   const visuals = getMoodVisuals(moodData?.mood);
 
   return (
-    <WidgetCard title="Affective State // Sentiment Analysis" icon={<BrainCircuit />} className={className}>
+    <WidgetCard 
+      title="Affective State // Sentiment Analysis" 
+      icon={<BrainCircuit />} 
+      className={className}
+      showHeader={true}
+      headerActions={
+        <Button 
+          onClick={handleRefresh} 
+          variant="ghost" 
+          size="sm" 
+          className="text-muted-foreground hover:text-primary"
+          disabled={isLoading}
+        >
+          <RefreshCw size={14} className={`mr-1 ${isLoading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
+      }
+    >
       {isLoading && (
         <div className="flex flex-col items-center justify-center h-full min-h-[150px]">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -99,19 +131,9 @@ const MoodWidget = ({ className }: MoodWidgetProps) => {
         <div className="flex flex-col items-center text-center py-2 group h-full justify-center space-y-2">
           {visuals.icon}
           <p className={`text-xl font-bold ${visuals.color}`}>{moodData.mood || "Analysis Inconclusive"}</p>
-          <p className="text-sm text-gray-600 px-2 leading-tight max-h-[60px] overflow-y-auto">
-            {moodData.summary || "Emotional state assessment pending further data collection."}
+          <p className="text-sm text-gray-600 px-2 leading-tight">
+            {moodData.explanation || "Emotional state assessment pending further data collection."}
           </p>
-          {moodData.recommendation && (
-            <p className="text-xs text-blue-600 italic px-2 leading-tight">
-              💡 {moodData.recommendation}
-            </p>
-          )}
-          {moodData.explanation && (
-            <p className="text-xs text-gray-500 mt-1 px-2 max-h-[50px] overflow-y-auto scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-transparent">
-              {moodData.explanation}
-            </p>
-          )}
         </div>
       )}
        {!isLoading && !error && !moodData && (
@@ -120,6 +142,11 @@ const MoodWidget = ({ className }: MoodWidgetProps) => {
           <p className="text-muted-foreground">Affective state data currently unavailable.</p>
         </div>
       )}
+      <div className="absolute top-4 right-4">
+        <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isLoading} className="group">
+          <RefreshCw className="h-5 w-5 text-muted-foreground transition-transform group-hover:rotate-180" />
+        </Button>
+      </div>
     </WidgetCard>
   );
 };

@@ -1,13 +1,13 @@
-
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
 import WidgetCard from "./WidgetCard";
-import { HeartPulse, Footprints, BedDouble, Activity, Smartphone, Loader2, AlertTriangle, UserCircle, LogOut, LinkIcon } from "lucide-react";
+import { HeartPulse, Footprints, BedDouble, Activity, Smartphone, Loader2, AlertTriangle, UserCircle, LogOut, LinkIcon, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getHealthSummary, type HealthSummaryInput, type HealthSummaryOutput } from '@/ai/flows/health-data-flow';
 import { app } from '@/lib/firebase/client';
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, type User } from "firebase/auth";
+import { authManager } from '@/lib/auth-manager';
 
 interface HealthDataWidgetProps {
   className?: string;
@@ -59,47 +59,40 @@ const HealthDataWidget = ({ className }: HealthDataWidgetProps) => {
     }
   };
 
-  useEffect(() => {
-    if (authStateTimeoutRef.current) clearTimeout(authStateTimeoutRef.current);
+  const handleRefresh = async () => {
+    if (currentUser) {
+      const token = authManager.getToken('health');
+      if (token) {
+        await fetchHealthDataWithToken(currentUser.uid, token);
+      }
+    }
+  };
 
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+  useEffect(() => {
+    // Set up auth state monitoring through centralized manager
+    const unsubscribeAuthManager = authManager.onAuthStateChange((user) => {
       setCurrentUser(user);
       setIsLoadingAuth(false);
       
       if (user) {
-        const storedTokenUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id_fit');
-        const storedToken = storedTokenUserId === user.uid ? sessionStorage.getItem(`firebase_oauth_token_${user.uid}_fit`) : null;
+        const token = authManager.getToken('health');
         
-        if (storedToken) {
-          fetchHealthDataWithToken(user.uid, storedToken);
+        if (token) {
+          fetchHealthDataWithToken(user.uid, token);
         } else {
-          if (authStateTimeoutRef.current) clearTimeout(authStateTimeoutRef.current);
-          authStateTimeoutRef.current = setTimeout(() => {
-            if (auth.currentUser && auth.currentUser.uid === user.uid) {
-              const recheckedToken = sessionStorage.getItem(`firebase_oauth_token_${user.uid}_fit`);
-              if (!recheckedToken) {
-                console.log("[HealthDataWidget] Fit Token still absent for user:", user.uid, "after delay.");
-                setDataError("Google Fit OAuth token not found. Please connect or re-authenticate.");
-                setHealthData(null); 
-              } else {
-                fetchHealthDataWithToken(user.uid, recheckedToken);
-              }
-            }
-          }, 100);
+          console.log("[HealthDataWidget] No health token found for user:", user.uid);
+          setDataError("Google Fit OAuth token not found. Please connect or re-authenticate.");
+          setHealthData(null);
         }
-      } else { // User is signed out
+      } else {
         setDataError("User not signed in to view health data.");
         setHealthData(null);
-        const currentTokenUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id_fit');
-        if (currentTokenUserId) {
-            sessionStorage.removeItem(`firebase_oauth_token_${currentTokenUserId}_fit`);
-        }
-        sessionStorage.removeItem('firebase_oauth_token_current_user_id_fit'); 
+        authManager.clearAllTokens();
       }
     });
     
     return () => {
-      unsubscribe();
+      unsubscribeAuthManager();
       if (authStateTimeoutRef.current) clearTimeout(authStateTimeoutRef.current);
     };
   }, []);
@@ -112,28 +105,25 @@ const HealthDataWidget = ({ className }: HealthDataWidgetProps) => {
     const provider = new GoogleAuthProvider();
     provider.addScope('https://www.googleapis.com/auth/fitness.activity.read');
     provider.addScope('https://www.googleapis.com/auth/fitness.sleep.read');
-    provider.addScope('https://www.googleapis.com/auth/fitness.heart_rate.read'); // Added heart rate scope
+    provider.addScope('https://www.googleapis.com/auth/fitness.heart_rate.read');
     
     try {
       const result = await signInWithPopup(auth, provider);
       const credential = GoogleAuthProvider.credentialFromResult(result);
       if (credential && credential.accessToken) {
         const token = credential.accessToken;
-        sessionStorage.setItem(`firebase_oauth_token_${result.user.uid}_fit`, token);
-        sessionStorage.setItem('firebase_oauth_token_current_user_id_fit', result.user.uid);
-        // onAuthStateChanged will handle fetching data because currentUser state changes
+        // Store token using centralized auth manager
+        authManager.storeToken('health', token, result.user.uid);
+        // The auth state change listener will handle fetching data
       } else {
         throw new Error("No access token received from Google Sign-In for Fit.");
       }
     } catch (error: any) {
       console.error("Error during Google Fit sign-in:", error);
       setAuthError(error.message || "Failed to sign in with Google for Fit access.");
-      const currentTokenUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id_fit');
-      if (currentTokenUserId) {
-          sessionStorage.removeItem(`firebase_oauth_token_${currentTokenUserId}_fit`);
-      }
-      sessionStorage.removeItem('firebase_oauth_token_current_user_id_fit');
-      setIsLoadingAuth(false); // Ensure loading state is reset on error
+      // Clear any partial tokens on error
+      authManager.removeToken('health');
+      setIsLoadingAuth(false);
     }
   };
 
@@ -141,22 +131,14 @@ const HealthDataWidget = ({ className }: HealthDataWidgetProps) => {
     setAuthError(null);
     setDataError(null);
     setHealthData(null);
-    const currentTokenUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id_fit');
-    if (currentTokenUserId) {
-        sessionStorage.removeItem(`firebase_oauth_token_${currentTokenUserId}_fit`);
-    }
-    sessionStorage.removeItem('firebase_oauth_token_current_user_id_fit');
     
-    // To reflect immediate disconnection for Fit, explicitly set currentUser to null
-    // and set appropriate messages, then onAuthStateChanged will confirm.
-    // This provides a faster UI update for the "disconnect" action.
+    // Clear tokens through auth manager
+    authManager.removeToken('health');
+    
+    // Set immediate UI feedback
     setCurrentUser(null); 
     setIsLoadingAuth(false);
     setDataError("Disconnected from Google Fit. Please connect to see data.");
-
-    // Optionally, if you want to trigger a full Firebase sign-out (which affects all services):
-    // await signOut(auth);
-    // For now, we only clear Fit-specific session data and UI state.
   };
 
   const steps = healthData?.status === "success" ? (healthData.steps ?? 'N/A') : 'N/A';
@@ -166,11 +148,13 @@ const HealthDataWidget = ({ className }: HealthDataWidgetProps) => {
   
   let sleepFormatted = 'N/A';
   if (typeof sleepMinutes === 'number') {
-    const hours = Math.floor(sleepMinutes / 60);
-    const minutes = sleepMinutes % 60;
-    sleepFormatted = `${hours}h ${minutes}m`;
-  } else if (sleepMinutes === 0) {
+    if (sleepMinutes === 0) {
       sleepFormatted = "0m";
+    } else {
+      const hours = Math.floor(sleepMinutes / 60);
+      const minutes = sleepMinutes % 60;
+      sleepFormatted = `${hours}h ${minutes}m`;
+    }
   }
 
 
@@ -197,12 +181,24 @@ const HealthDataWidget = ({ className }: HealthDataWidgetProps) => {
       {!isLoadingAuth && currentUser && (
         <>
           <div className="flex justify-between items-center mb-3">
-            <p className="text-xs text-green-600 truncate max-w-[calc(100%-110px)]" title={`Connected for Fit: ${currentUser.displayName || currentUser.email || "User"}`}>
+            <p className="text-xs text-green-600 truncate max-w-[calc(100%-170px)]" title={`Connected for Fit: ${currentUser.displayName || currentUser.email || "User"}`}>
               Fit Connected: {currentUser.displayName || currentUser.email}
             </p>
-            <Button onClick={handleSignOutFit} variant="ghost" size="sm" className="text-gray-600 hover:text-red-600 flex-shrink-0">
-              <LogOut size={14} className="mr-1" /> Disconnect Fit
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button 
+                onClick={handleRefresh} 
+                variant="ghost" 
+                size="sm" 
+                className="text-gray-600 hover:text-blue-600 flex-shrink-0"
+                disabled={isLoadingData}
+              >
+                <RefreshCw size={14} className={`mr-1 ${isLoadingData ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+              <Button onClick={handleSignOutFit} variant="ghost" size="sm" className="text-gray-600 hover:text-red-600 flex-shrink-0">
+                <LogOut size={14} className="mr-1" /> Disconnect Fit
+              </Button>
+            </div>
           </div>
           {authError && <p className="text-red-600 text-sm mb-2">{authError}</p>}
           
@@ -271,4 +267,3 @@ const HealthDataWidget = ({ className }: HealthDataWidgetProps) => {
 
 export default HealthDataWidget;
 
-    

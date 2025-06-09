@@ -1,12 +1,12 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import WidgetCard from "./WidgetCard";
 import {
   Sun, CloudSun, Cloud, CloudRain, CloudSnow, CloudLightning, Wind as WindIcon, Thermometer,
-  Droplets as HumidityIcon, Loader2, AlertTriangle, MapPin
+  Droplets as HumidityIcon, Loader2, AlertTriangle, MapPin, RefreshCw
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { getWeatherForecast, type WeatherForecastOutput, type WeatherForecastInput } from '@/ai/flows/weather-forecast-flow';
 
 interface WeatherWidgetProps {
@@ -94,6 +94,35 @@ const WeatherWidget = ({ className, defaultLocation = "New York, NY" }: WeatherW
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locationToFetch]); 
 
+  const handleRefresh = async () => {
+    if (!locationToFetch) return;
+    setIsLoading(true);
+    // Clear previous weather-specific error, but keep geolocation error if it exists
+    if (!error?.startsWith("Geolocation failed")) {
+      setError(null);
+    }
+
+    try {
+      const input: WeatherForecastInput = { location: locationToFetch };
+      const result = await getWeatherForecast(input);
+      setWeatherData(result);
+      if (result && result.locationName) {
+        setCurrentLocationForDisplay(result.locationName);
+      } else if (locationToFetch.includes(',')) {
+         setCurrentLocationForDisplay(prev => prev === "Your Current Location" ? prev : "Near your location");
+      } else {
+        setCurrentLocationForDisplay(locationToFetch);
+      }
+    } catch (err: any) {
+      console.error("Error fetching weather data in widget:", err);
+      const weatherError = err.message || "Failed to retrieve weather data. Atmospheric interference detected.";
+      setError(prevError => prevError?.startsWith("Geolocation failed") ? `${prevError} ${weatherError}`: weatherError);
+      setWeatherData(null); 
+      setCurrentLocationForDisplay(locationToFetch.includes(',') ? "Current Location (Error)" : locationToFetch);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const CurrentWeatherIcon = weatherData?.icon ? (iconComponents[weatherData.icon] || Thermometer) : Thermometer;
   const LocationStatusIcon = usingGeoLocation ? <MapPin size={12} className="text-green-400 inline-block mr-1" /> : <AlertTriangle size={12} className="text-yellow-400 inline-block mr-1" />;
@@ -103,6 +132,19 @@ const WeatherWidget = ({ className, defaultLocation = "New York, NY" }: WeatherW
       title="Atmospheric Analysis"
       icon={isLoading && !error ? <Loader2 className="h-5 w-5 animate-spin text-primary opacity-70" /> : <CurrentWeatherIcon className="h-5 w-5 text-primary opacity-90" />}
       className={className}
+      showHeader={true}
+      headerActions={
+        <Button 
+          onClick={handleRefresh} 
+          variant="ghost" 
+          size="sm" 
+          className="text-muted-foreground hover:text-primary"
+          disabled={isLoading}
+        >
+          <RefreshCw size={14} className={`mr-1 ${isLoading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
+      }
     >
       {isLoading && (
         <div className="flex flex-col items-center justify-center h-full min-h-[180px]">

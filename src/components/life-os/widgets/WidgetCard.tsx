@@ -6,9 +6,19 @@ interface WidgetCardProps {
   children: React.ReactNode;
   className?: string;
   contentClassName?: string;
+  headerActions?: React.ReactNode;
+  showHeader?: boolean;
 }
 
-const WidgetCard: React.FC<WidgetCardProps> = ({ title, icon, children, className, contentClassName }) => {
+const WidgetCard: React.FC<WidgetCardProps> = ({ 
+  title, 
+  icon, 
+  children, 
+  className, 
+  contentClassName, 
+  headerActions,
+  showHeader = false 
+}) => {
   return (
     <div 
       className={`
@@ -16,9 +26,25 @@ const WidgetCard: React.FC<WidgetCardProps> = ({ title, icon, children, classNam
         ${className}
       `}
     >
-      {/* Content Area - No duplicate header since parent handles it */}
+      {/* Optional Header */}
+      {showHeader && (
+        <div className="widget-card-header flex items-center justify-between p-4 border-b">
+          <div className="flex items-center gap-2">
+            {icon}
+            <h3 className="text-lg font-semibold">{title}</h3>
+          </div>
+          {headerActions && (
+            <div className="flex items-center gap-2">
+              {headerActions}
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Content Area */}
       <div className={`
         widget-card-content h-full w-full flex flex-col
+        ${showHeader ? 'flex-1' : ''}
         ${contentClassName}
       `}>
         {children}

@@ -1,9 +1,8 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import WidgetCard from "./WidgetCard";
-import { Lightbulb, Zap, Users, Loader2, AlertTriangle, Utensils, MessageSquare } from "lucide-react";
+import { Lightbulb, Zap, Users, Loader2, AlertTriangle, Utensils, MessageSquare, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { suggest, type SuggestInput, type SuggestOutput } from '@/ai/flows/intelligent-suggestions';
 
@@ -55,8 +54,41 @@ const IntelligentSuggestionsWidget = ({ className }: IntelligentSuggestionsWidge
     fetchSuggestions();
   }, []);
 
+  const handleRefresh = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const randomIndex = Math.floor(Math.random() * sampleInputs.length);
+      const input = sampleInputs[randomIndex];
+      const result = await suggest(input);
+      setSuggestions(result);
+    } catch (err) {
+      console.error("Error fetching intelligent suggestions:", err);
+      setError("Failed to generate suggestions. Cognitive systems may be offline.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
-    <WidgetCard title="Cognitive Feed // Suggestions" icon={<Lightbulb />} className={className}>
+    <WidgetCard 
+      title="Cognitive Feed // Suggestions" 
+      icon={<Lightbulb />} 
+      className={className}
+      showHeader={true}
+      headerActions={
+        <Button 
+          onClick={handleRefresh} 
+          variant="ghost" 
+          size="sm" 
+          className="text-muted-foreground hover:text-primary"
+          disabled={isLoading}
+        >
+          <RefreshCw size={14} className={`mr-1 ${isLoading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
+      }
+    >
       {isLoading && (
         <div className="flex flex-col items-center justify-center h-full min-h-[150px]">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -103,6 +135,11 @@ const IntelligentSuggestionsWidget = ({ className }: IntelligentSuggestionsWidge
             <p className="text-muted-foreground">No suggestions available currently.</p>
         </div>
       )}
+      <div className="absolute top-4 right-4">
+        <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isLoading}>
+          <RefreshCw className="h-5 w-5" />
+        </Button>
+      </div>
     </WidgetCard>
   );
 };

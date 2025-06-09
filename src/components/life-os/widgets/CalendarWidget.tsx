@@ -1,13 +1,13 @@
-
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
 import WidgetCard from "./WidgetCard";
-import { CalendarDays, Link, Loader2, AlertTriangle, LogOut, UserCircle } from "lucide-react";
+import { CalendarDays, Link, Loader2, AlertTriangle, LogOut, UserCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getCalendarEvents, type GetCalendarEventsInput, type GetCalendarEventsOutput, type CalendarEvent } from '@/ai/flows/calendar-events-flow';
 import { app } from '@/lib/firebase/client';
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, type User } from "firebase/auth";
+import { authManager } from '@/lib/auth-manager';
 
 interface CalendarWidgetProps {
   className?: string;
@@ -69,8 +69,7 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
       if (result.status === "requires_authentication" && 
           (result.message?.includes("insufficient") || result.message?.includes("permissions are insufficient"))) {
         console.log("[CalendarWidget] Detected scope insufficient error, clearing tokens to force re-authentication");
-        sessionStorage.removeItem(`firebase_oauth_token_${userId}`);
-        sessionStorage.removeItem('firebase_oauth_token_current_user_id');
+        authManager.removeToken('calendar');
       }
       
       setEventsData(result); 
@@ -84,51 +83,31 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
   };
 
   useEffect(() => {
-    if (authStateTimeoutRef.current) {
-      clearTimeout(authStateTimeoutRef.current);
-    }
+    let unsubscribeAuth: (() => void) | undefined;
 
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    // Set up auth state monitoring through centralized manager
+    const unsubscribeAuthManager = authManager.onAuthStateChange((user) => {
       setCurrentUser(user);
       setIsLoadingAuth(false);
       
       if (user) {
-        const storedTokenUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id');
-        const storedToken = storedTokenUserId === user.uid ? sessionStorage.getItem(`firebase_oauth_token_${user.uid}`) : null;
+        const token = authManager.getToken('calendar');
         
-        if (storedToken) {
-          fetchCalendarEventsWithToken(user.uid, storedToken);
+        if (token) {
+          fetchCalendarEventsWithToken(user.uid, token);
         } else {
-          // Delay setting "token not found" to avoid race conditions during fast sign-out/refresh
-          if (authStateTimeoutRef.current) clearTimeout(authStateTimeoutRef.current);
-          authStateTimeoutRef.current = setTimeout(() => {
-            // Re-check current user status before declaring token absent
-            if (auth.currentUser && auth.currentUser.uid === user.uid) {
-                const recheckedToken = sessionStorage.getItem(`firebase_oauth_token_${user.uid}`);
-                if (!recheckedToken) {
-                    console.log("[CalendarWidget] Token still absent for user:", user.uid, "after delay. Setting requires_authentication.");
-                    setEventsData({ status: "requires_authentication", message: "OAuth token not found in session. Please connect or re-authenticate." });
-                } else {
-                    console.log("[CalendarWidget] Token found for user:", user.uid, "after delay. Fetching events.");
-                    fetchCalendarEventsWithToken(user.uid, recheckedToken);
-                }
-            } else {
-                 console.log("[CalendarWidget] User changed during token check delay or became null. Current auth.currentUser:", auth.currentUser?.uid);
-            }
-          }, 100); // 100ms delay
+          console.log("[CalendarWidget] No calendar token found for user:", user.uid);
+          setEventsData({ status: "requires_authentication", message: "OAuth token not found. Please connect or re-authenticate." });
         }
-      } else { // User is signed out
+      } else {
         setEventsData({ status: "requires_authentication", message: "User not signed in."});
-        const currentTokenUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id');
-        if (currentTokenUserId) {
-            sessionStorage.removeItem(`firebase_oauth_token_${currentTokenUserId}`);
-        }
-        sessionStorage.removeItem('firebase_oauth_token_current_user_id'); 
+        authManager.clearAllTokens();
       }
     });
     
     return () => {
-      unsubscribe();
+      unsubscribeAuthManager();
+      if (unsubscribeAuth) unsubscribeAuth();
       if (authStateTimeoutRef.current) {
         clearTimeout(authStateTimeoutRef.current);
       }
@@ -141,39 +120,38 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
     setAuthError(null);
     setEventsData(null); 
     const provider = new GoogleAuthProvider();
-    // Use full calendar scope (not just calendar.events) to ensure read/write access to calendar events
-    provider.addScope('https://www.googleapis.com/auth/calendar'); 
+    // Use full calendar scope for read/write access
+    provider.addScope('https://www.googleapis.com/auth/calendar');
+    provider.addScope('https://www.googleapis.com/auth/calendar.events'); 
     
     try {
       const result = await signInWithPopup(auth, provider);
       const credential = GoogleAuthProvider.credentialFromResult(result);
       if (credential && credential.accessToken) {
         const token = credential.accessToken;
-        sessionStorage.setItem(`firebase_oauth_token_${result.user.uid}`, token);
-        sessionStorage.setItem('firebase_oauth_token_current_user_id', result.user.uid);
-        // onAuthStateChanged will handle fetching events
+        // Store token using centralized auth manager
+        authManager.storeToken('calendar', token, result.user.uid);
+        // The auth state change listener will handle fetching events
       } else {
         throw new Error("No access token received from Google Sign-In.");
       }
     } catch (error: any) {
       console.error("Error during sign-in:", error);
       setAuthError(error.message || "Failed to sign in with Google.");
-      const currentTokenUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id');
-      if (currentTokenUserId) {
-          sessionStorage.removeItem(`firebase_oauth_token_${currentTokenUserId}`);
-      }
-      sessionStorage.removeItem('firebase_oauth_token_current_user_id');
+      // Clear any partial tokens on error
+      authManager.removeToken('calendar');
+    } finally {
+      setIsLoadingAuth(false);
     }
   };
 
   const handleSignOut = async () => {
     setAuthError(null);
     setEventsData(null); 
-    const currentTokenUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id');
-    if (currentTokenUserId) {
-        sessionStorage.removeItem(`firebase_oauth_token_${currentTokenUserId}`);
-    }
-    sessionStorage.removeItem('firebase_oauth_token_current_user_id');
+    
+    // Clear tokens through auth manager
+    authManager.removeToken('calendar');
+    
     try {
       await signOut(auth);
       // onAuthStateChanged will set currentUser to null and update eventsData.
@@ -182,6 +160,34 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
       setAuthError(error.message || "Failed to sign out.");
     }
   };
+
+  const handleRefresh = async () => {
+    if (currentUser) {
+      const token = authManager.getToken('calendar');
+      if (token) {
+        await fetchCalendarEventsWithToken(currentUser.uid, token);
+      }
+    }
+  };
+
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout | null = null;
+
+    if (currentUser) {
+      const token = authManager.getToken('calendar');
+      if (token) {
+        fetchCalendarEventsWithToken(currentUser.uid, token);
+      } else {
+        console.log("[CalendarWidget] No token found on initial load for user:", currentUser.uid);
+      }
+    }
+
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [currentUser]);
 
 
   return (
@@ -210,9 +216,14 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
             <p className="text-xs text-green-400 truncate max-w-[calc(100%-80px)]" title={currentUser.displayName || currentUser.email || "User"}>
               Connected: {currentUser.displayName || currentUser.email}
             </p>
-            <Button onClick={handleSignOut} variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive flex-shrink-0">
-              <LogOut size={14} className="mr-1" /> Disconnect
-            </Button>
+            <div className="flex items-center">
+              <Button onClick={handleRefresh} variant="ghost" size="sm" className="text-muted-foreground hover:text-primary flex-shrink-0 mr-2">
+                <RefreshCw size={14} className="mr-1" /> Refresh
+              </Button>
+              <Button onClick={handleSignOut} variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive flex-shrink-0">
+                <LogOut size={14} className="mr-1" /> Disconnect
+              </Button>
+            </div>
           </div>
           {authError && <p className="text-destructive text-sm mb-2">{authError}</p>}
 
@@ -229,10 +240,14 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
                 {eventsData.status === "error" ? eventsData.errorMessage : eventsData.message}
               </p>
               {(eventsData.status === "requires_authentication" || 
-                eventsData.message?.includes("insufficient authentication scopes") ||
-                eventsData.message?.includes("authentication failed")) &&
+                (eventsData.status === "error" && (
+                  eventsData.errorMessage?.includes("insufficient authentication scopes") ||
+                  eventsData.errorMessage?.includes("authentication failed") ||
+                  eventsData.errorMessage?.includes("403") ||
+                  eventsData.errorMessage?.includes("PERMISSION_DENIED")
+                ))) &&
                 <Button onClick={handleSignIn} variant="link" className="mt-2 text-sm text-blue-600">
-                  Re-authenticate with Calendar Access
+                  Re-authenticate with Full Calendar Access
                 </Button>
               }
             </div>

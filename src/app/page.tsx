@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { getAuth, type User } from 'firebase/auth';
 import { app } from '@/lib/firebase/client';
+import { authManager } from '@/lib/auth-manager';
 import { FirebaseApp } from 'firebase/app';
 import Link from 'next/link';
 import './luxe.css';
@@ -179,30 +180,43 @@ export default function LuxeLifeInterface() {
       setInput('');
       setIsAiResponding(true);
 
-            // Get the best available OAuth token for the user
+      // Get OAuth tokens for the user using centralized auth manager
       let oauthToken: string | undefined = undefined;
+      let calendarToken: string | undefined = undefined;
+      let healthToken: string | undefined = undefined;
       const firebaseUser = auth.currentUser;
       
       if (firebaseUser) {
         console.log("[handleSend] Getting tokens for user:", firebaseUser.uid);
         
-        // Try health token first (covers most health and fitness queries)
-        const storedHealthTokenUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id_fit');
-        const healthToken = storedHealthTokenUserId === firebaseUser.uid ? 
-          sessionStorage.getItem(`firebase_oauth_token_${firebaseUser.uid}_fit`) : null;
+        // Get service-specific tokens
+        calendarToken = authManager.getToken('calendar') || undefined;
+        healthToken = authManager.getToken('health') || undefined;
         
-        // Try calendar token second
-        const storedCalendarTokenUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id');
-        const calendarToken = storedCalendarTokenUserId === firebaseUser.uid ? 
-          sessionStorage.getItem(`firebase_oauth_token_${firebaseUser.uid}`) : null;
+        // Use the best available token as fallback
+        oauthToken = calendarToken || healthToken;
         
-        // Use the best available token (orchestrator will intelligently choose which services to call)
-        oauthToken = healthToken || calendarToken || undefined;
-        console.log("[handleSend] Token available:", !!oauthToken);
+        console.log("[handleSend] Calendar token available:", !!calendarToken);
+        console.log("[handleSend] Health token available:", !!healthToken);
+        console.log("[handleSend] Fallback token available:", !!oauthToken);
+        
+        // Auto-validate tokens if available to prevent unnecessary auth errors
+        if (calendarToken || healthToken) {
+          authManager.validateAndRefreshTokens().then(results => {
+            console.log("[handleSend] Token validation results:", results);
+          }).catch(error => {
+            console.warn("[handleSend] Token validation failed:", error);
+          });
+        }
       }
 
       try {
-        const chatInput: ChatInput = { prompt: userMessageText, oauthToken };
+        const chatInput: ChatInput = { 
+          prompt: userMessageText, 
+          oauthToken,
+          calendarToken,
+          healthToken
+        };
         const response: ChatOutput = await chatWithAI(chatInput);
         const aiMessage = { id: Date.now().toString() + '-ai', sender: 'ai', text: response.response };
         setMessages(prev => [...prev, aiMessage]);

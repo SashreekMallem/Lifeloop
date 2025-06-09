@@ -79,9 +79,9 @@ export const INTENT_PATTERNS = [
     specific: 'events',
   },
   {
-    pattern: /\b(weather|temperature|rain|sunny|cloudy|forecast|outside)\b/i,
+    pattern: /\b(weather|temperature|rain|sunny|cloudy|forecast|outside|near me|climate)\b/i,
     dataSources: ['weather'],
-    examples: ['what\'s the weather?', 'is it raining?', 'temperature today'],
+    examples: ['what\'s the weather?', 'is it raining?', 'temperature today', 'weather near me'],
   },
   {
     pattern: /\b(heart rate|bpm|pulse)\b/i,
@@ -128,9 +128,14 @@ export function detectIntent(userQuery: string): { sources: string[], specifics:
     }
   }
   
-  // If no patterns match, return a default set for general queries
+  // If no patterns match, only fetch data for truly general status queries
   if (relevantSources.size === 0) {
-    return { sources: ['health', 'calendar', 'weather'], specifics: [] };
+    // Check if it's a general status query
+    if (/\b(status|summary|overview|how am i|how's everything|update|dashboard)\b/i.test(userQuery)) {
+      return { sources: ['health', 'calendar', 'weather'], specifics: [] };
+    }
+    // For other unmatched queries, try to be conservative and only return weather as a fallback
+    return { sources: ['weather'], specifics: [] };
   }
   
   return { 

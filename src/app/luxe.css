@@ -511,14 +511,13 @@ p {
 .fullscreen-widgets-grid {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  grid-auto-rows: minmax(120px, auto);
+  grid-auto-rows: minmax(200px, auto);
   gap: 20px;
   padding: 20px;
-  height: 100%;
+  height: 100vh;
   width: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
-  grid-auto-flow: dense;
+  overflow: hidden;
+  grid-auto-flow: row;
   align-content: start;
 }
 
@@ -534,9 +533,9 @@ p {
   flex-direction: column;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
-  min-height: fit-content;
-  height: fit-content;
-  overflow: visible;
+  min-height: 200px;
+  max-height: 100%;
+  overflow: hidden;
   
   /* Default adaptive grid placement */
   grid-column: span 2;
@@ -568,16 +567,32 @@ p {
 /* Widget Content Adaptive Behavior */
 .fullscreen-widget .widget-content {
   flex: 1;
-  overflow: visible;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  height: auto;
+  height: 100%;
+  padding-right: 2px; /* Small padding to prevent scrollbar overlap */
 }
 
 .fullscreen-widget .widget-content > * {
-  flex-shrink: 0;
+  flex-shrink: 1;
   width: 100%;
+  max-width: 100%;
+}
+
+/* Specific widgets that need scrolling - Calendar only */
+.fullscreen-widget:nth-child(2) .widget-content {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Weather, Health, Mood widgets - no scrolling, fit content */
+.fullscreen-widget:nth-child(1) .widget-content,
+.fullscreen-widget:nth-child(3) .widget-content,
+.fullscreen-widget:nth-child(5) .widget-content {
+  overflow: hidden;
+  justify-content: flex-start;
 }
 
 /* Container queries for responsive widget content */
@@ -691,28 +706,13 @@ p {
   font-weight: 600;
   font-size: 0.95rem;
   flex-shrink: 0;
-}
-
-.fullscreen-widget .widget-content {
-  flex: 1;
-  overflow: auto;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fullscreen-widget .widget-header svg {
   color: var(--luxe-primary);
-}
-
-.widget-content {
-  padding: 0;
-  overflow: auto;
-}
-
-.fullscreen-widget .widget-content {
-  height: calc(100% - 60px);
-  overflow: auto;
 }
 
 /* True Adaptive Widget Sizes - Content-Aware (6-column grid) */
@@ -1551,34 +1551,39 @@ p {
 
 @media (max-width: 1024px) {
   .fullscreen-widgets-grid {
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     padding: 16px;
-    gap: 12px;
+    gap: 16px;
   }
   
   .widget-extra-large {
-    grid-column: span 6;
-    grid-row: span 4;
+    grid-column: span 4;
+    grid-row: span 3;
   }
   
   .widget-large {
-    grid-column: span 6;
-    grid-row: span 3;
+    grid-column: span 2;
+    grid-row: span 2;
   }
   
   .widget-medium {
-    grid-column: span 3;
-    grid-row: span 3;
+    grid-column: span 2;
+    grid-row: span 2;
   }
   
   .widget-small {
-    grid-column: span 3;
+    grid-column: span 2;
     grid-row: span 2;
   }
   
   .widget-full-width {
-    grid-column: span 6;
-    grid-row: span 5;
+    grid-column: span 4;
+    grid-row: span 3;
+  }
+  
+  .fullscreen-widget {
+    grid-column: span 2;
+    grid-row: span 2;
   }
   
   .floating-ai-assistant {
