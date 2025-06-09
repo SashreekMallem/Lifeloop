@@ -1,4 +1,3 @@
-
 'use server';
 /**
  * @fileOverview Provides weather forecast information by fetching real-time data
@@ -123,6 +122,9 @@ const getWeatherFromApiTool = ai.defineTool(
     }
   }
 );
+
+export const getWeatherForecastTool = getWeatherFromApiTool;
+export { getWeatherFromApiTool };
 
 const weatherPrompt = ai.definePrompt({
   name: 'weatherForecastPrompt',

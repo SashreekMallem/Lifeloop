@@ -117,29 +117,32 @@ const WeatherWidget = ({ className, defaultLocation = "New York, NY" }: WeatherW
         </div>
       )}
       {!isLoading && !error && weatherData && (
-        <div className="flex flex-col items-center text-center group h-full justify-around">
-          <div className="mb-1">
-            <CurrentWeatherIcon className="h-14 w-14 text-primary group-hover:scale-105 group-hover:drop-shadow-[0_0_10px_hsl(var(--primary-rgb))] transition-all duration-300" />
+        <div className="flex flex-col items-center text-center group h-full justify-center space-y-1.5 py-2">
+          <div className="flex-shrink-0">
+            <CurrentWeatherIcon className="h-10 w-10 text-primary group-hover:scale-105 transition-all duration-300" />
           </div>
-          <p className="text-3xl font-bold text-primary neon-text-primary -mt-1">{weatherData.temperature || "N/A"}</p>
-          <p className="text-base text-foreground/80 capitalize">{weatherData.condition || "N/A"}</p>
-          <p className="text-xs text-muted-foreground/80 uppercase tracking-wider px-2 truncate flex items-center justify-center" title={currentLocationForDisplay}>
+          <p className="text-xl font-bold text-primary flex-shrink-0">{weatherData.temperature || "N/A"}</p>
+          <p className="text-sm text-foreground/80 capitalize flex-shrink-0">{weatherData.condition || "N/A"}</p>
+          <p className="text-xs text-muted-foreground/80 uppercase tracking-wider px-2 truncate flex items-center justify-center flex-shrink-0" title={currentLocationForDisplay}>
              {LocationStatusIcon} {weatherData.locationName || currentLocationForDisplay || "N/A"}
           </p>
 
-          <div className="grid grid-cols-2 gap-x-2 gap-y-1 mt-2 text-xs w-full max-w-[180px] mx-auto">
-            <div className="flex items-center justify-start gap-1 text-muted-foreground/80 p-1 rounded-md">
-              <HumidityIcon size={12} className="text-primary/70" />
-              <span className="font-medium">{weatherData.humidity || "N/A"}</span>
+          <div className="grid grid-cols-2 gap-1.5 text-xs w-full max-w-[140px] mx-auto flex-shrink-0">
+            <div className="flex items-center justify-center gap-1 text-muted-foreground/80 p-1 rounded-md">
+              <HumidityIcon size={11} className="text-primary/70" />
+              <span className="font-medium text-xs">{weatherData.humidity || "N/A"}</span>
             </div>
-            <div className="flex items-center justify-start gap-1 text-muted-foreground/80 p-1 rounded-md">
-              <WindIcon size={12} className="text-primary/70" />
-              <span className="font-medium truncate" title={weatherData.wind}>{weatherData.wind || "N/A"}</span>
+            <div className="flex items-center justify-center gap-1 text-muted-foreground/80 p-1 rounded-md">
+              <WindIcon size={11} className="text-primary/70" />
+              <span className="font-medium truncate text-xs" title={weatherData.wind}>{weatherData.wind || "N/A"}</span>
             </div>
           </div>
-          <p className="text-xs text-secondary/90 mt-2 italic px-2 leading-tight max-h-[40px] overflow-y-auto scrollbar-thin">
-            {weatherData.recommendation || "No recommendation available."}
-          </p>
+          
+          {weatherData.recommendation && (
+            <p className="text-xs text-secondary/90 italic px-2 leading-tight max-h-[40px] overflow-y-auto scrollbar-thin flex-grow">
+              {weatherData.recommendation}
+            </p>
+          )}
         </div>
       )}
       {!isLoading && !error && !weatherData && (

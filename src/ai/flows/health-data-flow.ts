@@ -276,6 +276,11 @@ const getTodaysHeartRateTool = ai.defineTool(
       console.log(`[getTodaysHeartRateTool] API Response Status: ${response.status}`, responseText);
 
       if (!response.ok) {
+        // Handle permission errors gracefully for heart rate data
+        if (response.status === 403) {
+          console.log("[getTodaysHeartRateTool] Heart rate data access denied (permission not granted)");
+          return { heartRateBpm: undefined };
+        }
         throw new Error(`Google Fit API error for heart rate (Status ${response.status}): ${responseText}`);
       }
       

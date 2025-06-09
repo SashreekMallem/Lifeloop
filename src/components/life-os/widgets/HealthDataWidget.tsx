@@ -197,30 +197,30 @@ const HealthDataWidget = ({ className }: HealthDataWidgetProps) => {
       {!isLoadingAuth && currentUser && (
         <>
           <div className="flex justify-between items-center mb-3">
-            <p className="text-xs text-green-400 truncate max-w-[calc(100%-110px)]" title={`Connected for Fit: ${currentUser.displayName || currentUser.email || "User"}`}>
+            <p className="text-xs text-green-600 truncate max-w-[calc(100%-110px)]" title={`Connected for Fit: ${currentUser.displayName || currentUser.email || "User"}`}>
               Fit Connected: {currentUser.displayName || currentUser.email}
             </p>
-            <Button onClick={handleSignOutFit} variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive flex-shrink-0">
+            <Button onClick={handleSignOutFit} variant="ghost" size="sm" className="text-gray-600 hover:text-red-600 flex-shrink-0">
               <LogOut size={14} className="mr-1" /> Disconnect Fit
             </Button>
           </div>
-          {authError && <p className="text-destructive text-sm mb-2">{authError}</p>}
+          {authError && <p className="text-red-600 text-sm mb-2">{authError}</p>}
           
           {isLoadingData && (
             <div className="flex flex-col items-center justify-center h-full min-h-[100px]">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="mt-2 text-muted-foreground">Loading health data...</p>
+              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+              <p className="mt-2 text-gray-600">Loading health data...</p>
             </div>
           )}
 
           {!isLoadingData && dataError && (
             <div className="flex flex-col items-center justify-center h-full min-h-[100px] text-center">
-              <AlertTriangle className="h-8 w-8 text-destructive mb-2" />
-              <p className="text-destructive text-sm p-2 bg-destructive/10 rounded-md">
+              <AlertTriangle className="h-8 w-8 text-red-600 mb-2" />
+              <p className="text-red-600 text-sm p-2 bg-red-50 rounded-md">
                 {dataError}
               </p>
               {(dataError.includes("OAuth token") || dataError.includes("authentication") || dataError.includes("expired")) &&
-                <Button onClick={handleSignInFit} variant="link" className="mt-2 text-sm">Re-authenticate Google Fit</Button>
+                <Button onClick={handleSignInFit} variant="link" className="mt-2 text-sm text-blue-600">Re-authenticate Google Fit</Button>
               }
             </div>
           )}
@@ -228,24 +228,24 @@ const HealthDataWidget = ({ className }: HealthDataWidgetProps) => {
           {!isLoadingData && !dataError && healthData?.status === 'success' && (
             <div className="grid grid-cols-2 md:grid-cols-2 gap-3">
               <div className="glassmorphic p-2.5 rounded-lg text-center border border-primary/10 hover:border-primary/30 transition-all">
-                <div className="mx-auto h-7 w-7 flex items-center justify-center mb-0.5 opacity-80"><Footprints className="text-primary" /></div>
-                <p className="font-semibold text-md text-foreground/90">{steps}</p>
-                <p className="text-xs text-muted-foreground">Steps</p>
+                <div className="mx-auto h-7 w-7 flex items-center justify-center mb-0.5 opacity-80"><Footprints className="text-blue-600" /></div>
+                <p className="font-semibold text-md text-gray-800">{steps}</p>
+                <p className="text-xs text-gray-600">Steps</p>
               </div>
               <div className="glassmorphic p-2.5 rounded-lg text-center border border-primary/10 hover:border-primary/30 transition-all">
-                <div className="mx-auto h-7 w-7 flex items-center justify-center mb-0.5 opacity-80"><BedDouble className="text-secondary" /></div>
-                <p className="font-semibold text-md text-foreground/90">{sleepFormatted}</p>
-                <p className="text-xs text-muted-foreground">Sleep</p>
+                <div className="mx-auto h-7 w-7 flex items-center justify-center mb-0.5 opacity-80"><BedDouble className="text-purple-600" /></div>
+                <p className="font-semibold text-md text-gray-800">{sleepFormatted}</p>
+                <p className="text-xs text-gray-600">Sleep</p>
               </div>
               <div className="glassmorphic p-2.5 rounded-lg text-center border border-primary/10 hover:border-primary/30 transition-all">
-                <div className="mx-auto h-7 w-7 flex items-center justify-center mb-0.5 opacity-80"><HeartPulse className="text-red-400" /></div>
-                <p className="font-semibold text-md text-foreground/90">{heartRateBpm}{typeof heartRateBpm === 'number' ? <span className="text-xs"> bpm</span> : ''}</p>
-                <p className="text-xs text-muted-foreground">Heart Rate</p>
+                <div className="mx-auto h-7 w-7 flex items-center justify-center mb-0.5 opacity-80"><HeartPulse className="text-red-500" /></div>
+                <p className="font-semibold text-md text-gray-800">{heartRateBpm}{typeof heartRateBpm === 'number' ? <span className="text-xs text-gray-600"> bpm</span> : ''}</p>
+                <p className="text-xs text-gray-600">Heart Rate</p>
               </div>
               <div className="glassmorphic p-2.5 rounded-lg text-center border border-primary/10 hover:border-primary/30 transition-all">
-                <div className="mx-auto h-7 w-7 flex items-center justify-center mb-0.5 opacity-80"><Activity className="text-green-400" /></div>
-                <p className="font-semibold text-md text-foreground/90">{activeMinutes}{typeof activeMinutes === 'number' ? <span className="text-xs"> min</span> : ''}</p>
-                <p className="text-xs text-muted-foreground">Active Time</p>
+                <div className="mx-auto h-7 w-7 flex items-center justify-center mb-0.5 opacity-80"><Activity className="text-green-500" /></div>
+                <p className="font-semibold text-md text-gray-800">{activeMinutes}{typeof activeMinutes === 'number' ? <span className="text-xs text-gray-600"> min</span> : ''}</p>
+                <p className="text-xs text-gray-600">Active Time</p>
               </div>
             </div>
           )}

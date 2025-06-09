@@ -5,7 +5,7 @@ import { Bot, Send, Settings, Loader2 } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import LifeOSLogo from './LifeOSLogo';
-import { chatWithAI, type ChatInput, type ChatOutput } from '@/ai/flows/chat-flow';
+import { chatWithAI, type ChatInput, type ChatOutput } from '@/ai/flows/chat-flow-new';
 import { getAuth, type User } from 'firebase/auth'; // To check for current user
 import { app } from '@/lib/firebase/client'; // Firebase app instance
 
@@ -47,13 +47,20 @@ const AiConsole = () => {
 
       if (firebaseUser) {
         console.log("[AiConsole] Current Firebase User on send:", firebaseUser.uid);
-        const storedTokenUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id');
-        if (storedTokenUserId === firebaseUser.uid) {
-          oauthToken = sessionStorage.getItem(`firebase_oauth_token_${firebaseUser.uid}`) || undefined;
-          console.log("[AiConsole] OAuth Token for user", firebaseUser.uid, oauthToken ? "found in session." : "NOT found in session.");
-        } else {
-          console.warn("[AiConsole] Stored token User ID mismatch. Stored:", storedTokenUserId, "Current Firebase User:", firebaseUser.uid, ". Token will not be used.");
-        }
+        
+        // Try health token first (covers most health and fitness queries)
+        const storedHealthTokenUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id_fit');
+        const healthToken = storedHealthTokenUserId === firebaseUser.uid ? 
+          sessionStorage.getItem(`firebase_oauth_token_${firebaseUser.uid}_fit`) : null;
+        
+        // Try calendar token second
+        const storedCalendarTokenUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id');
+        const calendarToken = storedCalendarTokenUserId === firebaseUser.uid ? 
+          sessionStorage.getItem(`firebase_oauth_token_${firebaseUser.uid}`) : null;
+        
+        // Use the best available token (orchestrator will intelligently choose which services to call)
+        oauthToken = healthToken || calendarToken || undefined;
+        console.log("[AiConsole] Token available:", !!oauthToken);
       } else {
          console.warn("[AiConsole] No Firebase user (auth.currentUser is null) at time of send. Cannot retrieve OAuth token.");
       }
@@ -76,7 +83,7 @@ const AiConsole = () => {
 
       } catch (error) {
         console.error("Error calling AI chat flow:", error);
-        setMessages(prev => prev.filter(msg => msg.id !== aiThinkingMessage.id)); 
+        setMessages(prev => prev.filter(msg => msg.text === 'Thinking...')); 
         setMessages(prev => [...prev, {id: Date.now().toString() + '-ai-error', sender: 'ai', text: 'Sorry, I encountered an error. Please try again.' }]);
       } finally {
         setIsAiResponding(false);
@@ -85,65 +92,121 @@ const AiConsole = () => {
   };
 
   return (
-    <aside className="w-1/4 max-w-sm_ min-w-[320px] bg-sidebar flex flex-col border-r border-[hsla(var(--primary-rgb),0.1)] p-4 space-y-4 shadow-2xl">
-      <div className="flex items-center justify-between pb-2 border-b border-[hsla(var(--primary-rgb),0.05)]">
-        <LifeOSLogo />
-        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary">
-          <Settings size={20} />
+    <aside className="w-1/4 max-w-sm min-w-[320px] glassmorphic border-r-2 quantum-border p-6 space-y-6 shadow-2xl neural-grid relative overflow-hidden">
+      {/* HUD Corner Elements */}
+      <div className="absolute top-4 left-4 w-4 h-4 border-l-2 border-t-2 border-cyan-400/70" />
+      <div className="absolute top-4 right-4 w-4 h-4 border-r-2 border-t-2 border-purple-400/70" />
+      <div className="absolute bottom-4 left-4 w-4 h-4 border-l-2 border-b-2 border-pink-400/70" />
+      <div className="absolute bottom-4 right-4 w-4 h-4 border-r-2 border-b-2 border-yellow-400/70" />
+      
+      {/* Header */}
+      <div className="flex items-center justify-between pb-4 border-b border-cyan-400/30 hud-element rounded-lg p-3">
+        <div className="flex items-center gap-3">
+          <LifeOSLogo />
+          <div className="flex flex-col">
+            <span className="font-orbitron font-bold text-sm neon-text uppercase">AI Console</span>
+            <span className="text-xs text-cyan-400/80 font-mono">Neural Link Active</span>
+          </div>
+        </div>
+        <Button variant="ghost" size="icon" className="btn-holographic text-cyan-400 hover:text-white">
+          <Settings size={18} />
         </Button>
       </div>
       
-      <div className="flex-grow overflow-y-auto space-y-4 pr-2 scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-transparent">
+      {/* Messages Area */}
+      <div className="flex-grow overflow-y-auto space-y-4 pr-2 scan-lines relative z-10" style={{ maxHeight: 'calc(100vh - 300px)' }}>
         {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
-            <Bot size={32} className="mb-2 opacity-50" />
-            <p className="text-sm">AI Console Active.</p>
-            <p className="text-xs">Awaiting your command. Try asking to schedule an event!</p>
+          <div className="flex flex-col items-center justify-center h-full text-center">
+            <div className="glassmorphic rounded-2xl p-6 border quantum-border hover:glow-cyan">
+              <Bot size={48} className="mb-4 text-cyan-400 neon-glow-intense mx-auto" />
+              <p className="text-lg font-orbitron font-bold neon-text mb-2">AI Core Online</p>
+              <p className="text-sm text-cyan-400/80 font-mono">Neural Interface Ready</p>
+              <p className="text-xs text-gray-400 mt-2">Initialize with voice command or text input</p>
+            </div>
           </div>
         )}
         {messages.map((msg) => (
-          <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`p-3 rounded-xl max-w-[85%] text-sm leading-relaxed
+          <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
+            <div className={`p-4 rounded-xl max-w-[85%] text-sm leading-relaxed relative overflow-hidden
               ${msg.sender === 'user' 
-                ? 'bg-primary/20 text-foreground shadow-md'
-                : 'bg-card/80 backdrop-blur-sm border border-primary/10 text-foreground shadow-lg'
-              } 
-              ${msg.sender === 'ai' && 'glassmorphic'}`}>
-              {msg.sender === 'ai' && msg.text === 'Thinking...' && <Loader2 size={16} className="inline mr-2 mb-0.5 text-primary animate-spin" />}
-              {msg.sender === 'ai' && msg.text !== 'Thinking...' && <Bot size={16} className="inline mr-2 mb-0.5 text-primary" />}
-              {msg.text}
+                ? 'glassmorphic border border-purple-400/30 hover:glow-purple' 
+                : 'glassmorphic border border-cyan-400/30 hover:glow-cyan data-stream'
+              }`}>
+              {msg.sender === 'ai' && (
+                <div className="flex items-center gap-2 mb-2">
+                  <Bot size={16} className="text-cyan-400 neon-glow-intense" />
+                  <span className="text-xs font-mono text-cyan-400 uppercase tracking-wider">JARVIS</span>
+                </div>
+              )}
+              {msg.sender === 'user' && (
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-4 h-4 rounded-full bg-purple-400/80 border border-purple-300" />
+                  <span className="text-xs font-mono text-purple-400 uppercase tracking-wider">USER</span>
+                </div>
+              )}
+              {msg.sender === 'ai' && msg.text === 'Thinking...' && (
+                <div className="flex items-center gap-2">
+                  <Loader2 size={16} className="text-cyan-400 animate-spin" />
+                  <span className="typing font-mono text-cyan-400">Processing neural patterns...</span>
+                </div>
+              )}
+              <div className={`${msg.sender === 'ai' ? 'text-cyan-100' : 'text-purple-100'} relative z-10`}>
+                {msg.text !== 'Thinking...' && msg.text}
+              </div>
             </div>
           </div>
         ))}
         <div ref={messagesEndRef} />
       </div>
       
-      <div className="mt-auto pt-4 border-t border-[hsla(var(--primary-rgb),0.05)]">
-        <div className="flex items-center space-x-2">
-          <Textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={isAiResponding ? "AI is responding..." : "Ask Gemini..."}
-            className="flex-grow bg-background/50 border-primary/20 focus:border-primary focus:ring-primary text-sm min-h-[60px] resize-none glassmorphic"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            disabled={isAiResponding}
-          />
+      {/* Input Area */}
+      <div className="mt-auto pt-6 border-t border-cyan-400/30 relative z-10">
+        <div className="flex items-end space-x-3">
+          <div className="flex-grow relative">
+            <Textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={isAiResponding ? "Neural processing active..." : "Interface with JARVIS..."}
+              className="glassmorphic border-2 quantum-border focus:glow-cyan text-sm min-h-[80px] resize-none font-mono text-cyan-100 placeholder:text-cyan-400/60 bg-transparent"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              disabled={isAiResponding}
+            />
+            <div className="absolute bottom-2 left-3 flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+              <span className="text-xs font-mono text-green-400">READY</span>
+            </div>
+          </div>
           <Button 
             onClick={handleSend} 
             size="icon" 
-            className="bg-primary hover:bg-primary/80 text-primary-foreground h-[60px] w-[60px] rounded-xl shadow-lg hover:shadow-primary/50 transition-all disabled:opacity-50"
+            className="glassmorphic border-2 quantum-border hover:glow-cyan h-[80px] w-[80px] rounded-xl transition-all disabled:opacity-50 btn-holographic"
             disabled={isAiResponding}
           >
-            {isAiResponding ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
+            {isAiResponding ? (
+              <Loader2 size={24} className="animate-spin text-cyan-400" />
+            ) : (
+              <Send size={24} className="text-cyan-400" />
+            )}
           </Button>
         </div>
-        <div className="text-xs text-muted-foreground mt-2 text-center">
-          Quick Actions: [Focus Session] [Replan Day]
+        
+        {/* Quick Actions */}
+        <div className="mt-4 flex flex-wrap gap-2">
+          <div className="text-xs font-mono text-cyan-400/60 mb-2 uppercase tracking-wider">Neural Shortcuts:</div>
+          <button className="px-3 py-1 text-xs font-mono bg-cyan-400/10 border border-cyan-400/30 rounded-full hover:bg-cyan-400/20 text-cyan-400 transition-colors">
+            Focus Session
+          </button>
+          <button className="px-3 py-1 text-xs font-mono bg-purple-400/10 border border-purple-400/30 rounded-full hover:bg-purple-400/20 text-purple-400 transition-colors">
+            Replan Day
+          </button>
+          <button className="px-3 py-1 text-xs font-mono bg-pink-400/10 border border-pink-400/30 rounded-full hover:bg-pink-400/20 text-pink-400 transition-colors">
+            Health Scan
+          </button>
         </div>
       </div>
     </aside>

@@ -12,4 +12,5 @@ import '@/ai/flows/weather-forecast-flow.ts';
 // Note: calendar-tools.ts does not need to be imported here as it's not a flow file.
 import '@/ai/flows/calendar-events-flow.ts'; // Includes get, add, edit, delete Server Actions
 import '@/ai/flows/chat-flow.ts';
+import '@/ai/flows/chat-flow-new.ts'; // New orchestrator-based chat flow
 import '@/ai/flows/health-data-flow.ts'; // Added new health data flow

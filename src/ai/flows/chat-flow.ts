@@ -1,4 +1,3 @@
-
 'use server';
 /**
  * @fileOverview A Genkit flow for handling chat interactions with an AI,
@@ -16,7 +15,9 @@ import {
   editCalendarEventTool, 
   deleteCalendarEventTool,
   getActualCalendarEventsTool 
-} from '@/ai/tools/calendar-tools'; // <<<< UPDATED IMPORT PATH
+} from '@/ai/tools/calendar-tools';
+import { getHealthDataTool } from '@/ai/tools/health-tools';
+import { getWeatherFromApiTool } from '@/ai/flows/weather-forecast-flow';
 
 const ChatInputSchema = z.object({
   prompt: z.string().describe('The user\'s input message or question.'),
@@ -30,8 +31,16 @@ const ChatOutputSchema = z.object({
 export type ChatOutput = z.infer<typeof ChatOutputSchema>;
 
 export async function chatWithAI(input: ChatInput): Promise<ChatOutput> {
-  console.log('--- CHAT FLOW (chatWithAI function) START --- Input:', JSON.stringify(input));
-  return chatFlow(input);
+  console.log('🚀 [chatWithAI] Token present:', !!input.oauthToken, 'Prompt:', input.prompt.substring(0, 50) + '...');
+  
+  try {
+    const result = await chatFlow(input);
+    console.log('🚀 [chatWithAI] Success:', result.response.substring(0, 100) + '...');
+    return result;
+  } catch (error) {
+    console.error('💥 [chatWithAI] Error:', error);
+    throw error;
+  }
 }
 
 const chatPrompt = ai.definePrompt({
@@ -42,7 +51,9 @@ const chatPrompt = ai.definePrompt({
     addCalendarEventTool, 
     editCalendarEventTool, 
     deleteCalendarEventTool,
-    getActualCalendarEventsTool 
+    getActualCalendarEventsTool,
+    getHealthDataTool,
+    getWeatherFromApiTool
   ],
   config: { 
     safetySettings: [ // Permissive safety settings for debugging
@@ -53,13 +64,21 @@ const chatPrompt = ai.definePrompt({
     ],
   },
   system: `You are a helpful AI assistant integrated into a Life OS.
-You have tools to manage Google Calendar events: add, edit, delete, and get (list/read) events.
+You have tools to manage Google Calendar events (add, edit, delete, and list/read events), access Google Fit health data, and fetch real-time weather information.
 
 General Instructions:
 - Respond to the user's prompt concisely and helpfully.
-- If you need to use a calendar tool, and the user's OAuth token is provided, make sure to pass it to the tool.
+- If you need to use a calendar, health, or weather tool, and the user's OAuth token or location is provided, make sure to pass it to the tool.
 - Assume any calendar operations (get, add, edit, delete) should apply to the user's 'primary' calendar by setting 'calendarId' to 'primary' for the tools, unless the user specifies otherwise.
 - If details are missing for a calendar action (e.g., time for a new event), ask the user for them.
+- If details are missing for a weather query (e.g., location), ask the user for them.
+- When making decisions, use all available data sources (calendar, health, weather, and any future tools) to provide the most informed and helpful response possible.
+
+Tool Usage - Weather Tool:
+- Use the getWeatherFromApiTool when users ask about the weather, forecast, temperature, humidity, wind, or similar queries.
+- If the user does not specify a location, ask for it (city, state/country, or coordinates).
+- Example weather queries: "what's the weather?", "weather near me", "forecast for London", "is it raining?", "temperature in Tokyo".
+- Example of calling getWeatherFromApiTool: { "location": "London, UK" }
 
 Tool Usage - getActualCalendarEventsTool (Listing Events):
 - For general queries (e.g., "my schedule?", "what's on my calendar?", "show my events", "what do I have today?", "my events for today"), you are calling the tool to get events from *now* onwards. To achieve this, when you construct the input for \`getActualCalendarEventsTool\`, you MUST **COMPLETELY OMIT** the \`timeMin\` field. The tool will automatically use the current time if \`timeMin\` is not present. DO NOT pass \`timeMin: null\`, \`timeMin: ""\`, \`timeMin: {}\`, or any other placeholder. The \`timeMin\` key itself should be ABSENT from the JSON input to the tool.
@@ -76,8 +95,18 @@ Tool Usage - Other Calendar Tools (Add, Edit, Delete):
 - For editing an event, you'll need the event's ID and the details to change.
 - For deleting an event, you'll need the event's ID.
 
+Tool Usage - Health Data Tool:
+- **ALWAYS use the getHealthDataTool when users ask about their health metrics, steps, activity, heart rate, or sleep data.**
+- The tool requires the user's oauthToken which should be passed from the input.
+- Example health queries: "how many steps did I take today?", "how did I sleep last night?", "what's my heart rate?", "whats my heart rate?", "show me my health data", "my fitness data", "activity today".
+- **CRITICAL: If an oauthToken is provided in the input, you MUST ALWAYS attempt to call the getHealthDataTool for health queries. NEVER assume authentication is required if a token is provided.**
+- **Only return authentication messages if the tool call fails with authentication errors or if no token is provided.**
+- Example of calling getHealthDataTool (assuming oauthToken is "USER_TOKEN"): { "oauthToken": "USER_TOKEN" }
+
 Handling Tool Responses and Errors:
-- If an OAuth token is NOT available OR if a tool reports an authentication failure (e.g., an invalid or expired token), your response to the user MUST be a JSON object like: \`{ "response": "Informative message about the authentication issue. Please connect or re-authenticate your Google Calendar via the 'Chrono-Stream // Calendar' widget on the dashboard." }\` For example: \`{ "response": "To access your calendar, please connect or re-authenticate in the Calendar widget on your dashboard." }\` Do not attempt to use the tool again in the same turn if authentication failed.
+- IMPORTANT: If an OAuth token IS available in the input but a tool still reports authentication failure, this indicates the token may be expired or invalid. In this case, provide a helpful message asking the user to re-authenticate.
+- If an OAuth token is NOT available OR if a tool reports an authentication failure (e.g., an invalid or expired token) for calendar operations, your response to the user MUST be a JSON object like: \`{ "response": "To access your calendar, please connect or re-authenticate in the Calendar widget on your dashboard." }\`
+- Similarly, for health data authentication issues, your response should be: \`{ "response": "To access your health data, please connect or re-authenticate with Google Fit via the Health Data widget on your dashboard." }\`
 - If a tool call is successful and returns data (e.g., a list of events), summarize this information. Your response to the user MUST be a JSON object like: \`{ "response": "Summary of the successful tool operation and its results." }\` For example: \`{ "response": "I found 3 events on your calendar for today: Meeting at 10 AM, Lunch at 1 PM, and Project Sync at 3 PM." }\`
 - If a tool fails for reasons other than authentication, or if you cannot perform an action, inform the user clearly. Your response to the user MUST be a JSON object like: \`{ "response": "Clear explanation of the error or inability to perform the action." }\` For example: \`{ "response": "Sorry, I couldn't find an event with that ID to delete." }\`
 
@@ -95,9 +124,9 @@ Do NOT output any other JSON structure, plain text, or any characters outside th
 `,
   prompt: `User prompt: {{{prompt}}}
   {{#if oauthToken}}
-  (User OAuth token is available for use with tools that require it for calendar actions.)
+  (OAuth token available - USE IT to call health/calendar tools when needed)
   {{else}}
-  (User OAuth token is NOT available. Calendar actions requiring it may fail or need user to authenticate separately. Inform the user if they try a calendar action, following the JSON output format instructions.)
+  (No OAuth token - authentication required for calendar and health data)
   {{/if}}
   `,
 });
@@ -109,40 +138,40 @@ const chatFlow = ai.defineFlow(
     outputSchema: ChatOutputSchema,
   },
   async (input) => {
-    console.log("--- CHAT FLOW (chatFlow Genkit function) START --- Input:", JSON.stringify(input));
+    console.log("🔥 [chatFlow] Health query check - Token present:", !!input.oauthToken);
+    
     try {
-      console.log("[chatFlow] Calling chatPrompt with input:", JSON.stringify(input));
-      const {output} = await chatPrompt(input); 
+      const promptResult = await chatPrompt(input); 
+      const output = promptResult.output;
       
-      console.log("[chatFlow] Received raw output from chatPrompt:", JSON.stringify(output));
+      if (output === null) {
+        console.error("💥 [chatFlow] LLM returned null - schema validation failed");
+        return { response: "I had trouble understanding your request. Please try rephrasing your question." };
+      }
       
       if (!output || typeof output.response !== 'string') {
-        console.error("[chatFlow] Chat prompt returned malformed output or missing response field. Output was:", JSON.stringify(output));
-        return { response: "I'm sorry, I couldn't generate a valid response structure at this moment. Please try rephrasing your request." };
+        console.error("💥 [chatFlow] Invalid output format:", typeof output.response);
+        return { response: "I'm sorry, I couldn't generate a valid response. Please try rephrasing your request." };
       }
-      console.log("[chatFlow] Successfully processed chatPrompt. Returning response:", output.response);
+      
+      console.log("✅ [chatFlow] Success:", output.response.substring(0, 80) + '...');
       return { response: output.response }; 
 
     } catch (error: any) {
-      console.error("[chatFlow] Error during chatPrompt execution or output validation. Full error object:", error);
+      console.error("💥 [chatFlow] Error:", error.message?.substring(0, 100) || 'Unknown error');
+      
       const errorMessage = error.message || error.toString() || "Unknown error";
-      console.error("[chatFlow] Extracted error message:", errorMessage);
 
-      if (errorMessage.includes("429") || errorMessage.toLowerCase().includes("too many requests") || errorMessage.toLowerCase().includes("quota")) {
-        console.warn("[chatFlow] Detected rate limit error.");
-        return { response: "I'm currently experiencing high demand and have hit my request limit. Please try again in a moment." };
+      if (errorMessage.includes("429") || errorMessage.toLowerCase().includes("rate limit")) {
+        return { response: "I'm currently experiencing high demand. Please wait a moment and try again." };
       }
       
-      if (errorMessage.toLowerCase().includes("schema validation failed") && errorMessage.toLowerCase().includes("provided data:\n\nnull")) {
-         console.warn("[chatFlow] Detected schema validation error: chatPrompt likely resolved to null because the LLM's output did not conform to ChatOutputSchema. This often means the LLM failed to produce the required JSON { \"response\": \"...\" }.");
-         return { response: "I had trouble formatting my thoughts correctly. Could you try rephrasing your request or asking in a different way?"};
+      if (errorMessage.toLowerCase().includes("schema validation failed") && errorMessage.toLowerCase().includes("null")) {
+         console.error("💥 [chatFlow] LLM returned null instead of JSON");
+         return { response: "I had trouble formatting my response. Could you try rephrasing your request?"};
       }
-      if (errorMessage.toLowerCase().includes("schema validation failed")) {
-         console.warn("[chatFlow] Detected schema validation error. This might be due to incorrect tool input from the LLM OR the LLM's final response not matching the expected output schema.");
-         return { response: "I encountered an issue with the data format while trying to process your request. Could you try rephrasing or providing the information differently?"};
-      }
-      console.error("[chatFlow] Returning generic error response due to unhandled error.");
-      return { response: "An unexpected error occurred while processing your request. Please try again." };
+      
+      return { response: "An unexpected error occurred. Please try again." };
     }
   }
 );

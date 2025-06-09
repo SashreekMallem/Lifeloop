@@ -96,12 +96,22 @@ const MoodWidget = ({ className }: MoodWidgetProps) => {
         </div>
       )}
       {!isLoading && !error && moodData && (
-        <div className="flex flex-col items-center text-center py-2 group h-full justify-around">
+        <div className="flex flex-col items-center text-center py-2 group h-full justify-center space-y-2">
           {visuals.icon}
-          <p className={`text-2xl font-bold ${visuals.color}`}>{moodData.mood || "Analysis Inconclusive"}</p>
-          <p className="text-sm text-muted-foreground mt-2 px-2 max-h-[100px] overflow-y-auto scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-transparent">
-            {moodData.explanation || "Unable to provide detailed explanation at this time."}
+          <p className={`text-xl font-bold ${visuals.color}`}>{moodData.mood || "Analysis Inconclusive"}</p>
+          <p className="text-sm text-gray-600 px-2 leading-tight max-h-[60px] overflow-y-auto">
+            {moodData.summary || "Emotional state assessment pending further data collection."}
           </p>
+          {moodData.recommendation && (
+            <p className="text-xs text-blue-600 italic px-2 leading-tight">
+              💡 {moodData.recommendation}
+            </p>
+          )}
+          {moodData.explanation && (
+            <p className="text-xs text-gray-500 mt-1 px-2 max-h-[50px] overflow-y-auto scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-transparent">
+              {moodData.explanation}
+            </p>
+          )}
         </div>
       )}
        {!isLoading && !error && !moodData && (

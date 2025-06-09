@@ -17,12 +17,7 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-let app;
 // Check if Firebase has already been initialized
-if (!getApps().length) {
-  app = initializeApp(firebaseConfig);
-} else {
-  app = getApp(); // If already initialized, use that instance
-}
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 export { app };

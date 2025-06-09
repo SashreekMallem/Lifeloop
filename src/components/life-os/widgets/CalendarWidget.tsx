@@ -64,6 +64,15 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
     try {
       const input: GetCalendarEventsInput = { userId: userId, oauthToken: token, calendarId: 'primary', maxResults: 10 };
       const result = await getCalendarEvents(input);
+      
+      // Check if the result indicates scope insufficient error - automatically clear token to force re-auth
+      if (result.status === "requires_authentication" && 
+          (result.message?.includes("insufficient") || result.message?.includes("permissions are insufficient"))) {
+        console.log("[CalendarWidget] Detected scope insufficient error, clearing tokens to force re-authentication");
+        sessionStorage.removeItem(`firebase_oauth_token_${userId}`);
+        sessionStorage.removeItem('firebase_oauth_token_current_user_id');
+      }
+      
       setEventsData(result); 
 
     } catch (err: any) {
@@ -132,7 +141,8 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
     setAuthError(null);
     setEventsData(null); 
     const provider = new GoogleAuthProvider();
-    provider.addScope('https://www.googleapis.com/auth/calendar.events'); 
+    // Use full calendar scope (not just calendar.events) to ensure read/write access to calendar events
+    provider.addScope('https://www.googleapis.com/auth/calendar'); 
     
     try {
       const result = await signInWithPopup(auth, provider);
@@ -218,8 +228,12 @@ const CalendarWidget = ({ className }: CalendarWidgetProps) => {
               <p className="text-destructive text-sm p-2 bg-destructive/10 rounded-md">
                 {eventsData.status === "error" ? eventsData.errorMessage : eventsData.message}
               </p>
-              {(eventsData.status === "requires_authentication" && (eventsData.message?.includes("OAuth token") || eventsData.message?.includes("authentication failed"))) &&
-                <Button onClick={handleSignIn} variant="link" className="mt-2 text-sm">Re-authenticate Google Calendar</Button>
+              {(eventsData.status === "requires_authentication" || 
+                eventsData.message?.includes("insufficient authentication scopes") ||
+                eventsData.message?.includes("authentication failed")) &&
+                <Button onClick={handleSignIn} variant="link" className="mt-2 text-sm text-blue-600">
+                  Re-authenticate with Calendar Access
+                </Button>
               }
             </div>
           )}
