@@ -11,7 +11,7 @@ export const DataSourceSchema = z.object({
   name: z.string(),
   description: z.string(),
   requiresAuth: z.boolean(),
-  categories: z.array(z.enum(['health', 'calendar', 'weather', 'entertainment', 'social', 'productivity', 'finance', 'home'])),
+  categories: z.array(z.enum(['health', 'calendar', 'weather', 'email', 'entertainment', 'social', 'productivity', 'finance', 'home', 'smarthome', 'amazonmusic'])),
 });
 
 export type DataSource = z.infer<typeof DataSourceSchema>;
@@ -38,6 +38,13 @@ export const DATA_SOURCES: Record<string, DataSource> = {
     description: 'Current weather conditions and forecast',
     requiresAuth: false,
     categories: ['weather'],
+  },
+  email: {
+    id: 'email',
+    name: 'Email & Communication',
+    description: 'Unread emails, recent messages, priority senders, and actionable items from Gmail',
+    requiresAuth: true,
+    categories: ['productivity', 'social'],
   },
   // Future data sources - placeholder for now
   mood: {
@@ -68,6 +75,20 @@ export const DATA_SOURCES: Record<string, DataSource> = {
     requiresAuth: true,
     categories: ['home'],
   },
+  smarthome: {
+    id: 'smarthome',
+    name: 'Smart Home Control',
+    description: 'Google Smart Home devices, status, controls, energy usage, and automation',
+    requiresAuth: true,
+    categories: ['home', 'smarthome'],
+  },
+  amazonmusic: {
+    id: 'amazonmusic',
+    name: 'Amazon Music',
+    description: 'Currently playing music, recent tracks, playlists, listening history, and music preferences',
+    requiresAuth: true,
+    categories: ['entertainment', 'amazonmusic'],
+  },
 };
 
 // Intent detection patterns - maps user queries to relevant data sources
@@ -77,6 +98,18 @@ export const INTENT_PATTERNS = [
     dataSources: ['calendar'],
     examples: ['what\'s on my calendar?', 'my schedule today', 'any meetings?', 'events tomorrow'],
     specific: 'events',
+  },
+  {
+    pattern: /\b(add|create|schedule|book|set up|plan)\s+(meeting|event|appointment|call)\b/i,
+    dataSources: ['calendar'],
+    examples: ['add a meeting', 'create an event', 'schedule a call', 'book an appointment'],
+    specific: 'create_event',
+  },
+  {
+    pattern: /\b(add|create|schedule)\s+.*\s+(at|for|on)\s+\d+/i,
+    dataSources: ['calendar'],
+    examples: ['add meeting at 8', 'schedule call for 3pm', 'create event at 2'],
+    specific: 'create_event',
   },
   {
     pattern: /\b(weather|temperature|rain|sunny|cloudy|forecast|outside|near me|climate)\b/i,
@@ -112,6 +145,54 @@ export const INTENT_PATTERNS = [
     dataSources: ['health'],
     examples: ['steps today', 'heart rate', 'how did I sleep', 'health summary'],
     specific: 'general',
+  },
+  {
+    pattern: /\b(smart home|devices|lights|thermostat|camera|speaker|home automation|control|turn on|turn off)\b/i,
+    dataSources: ['smarthome'],
+    examples: ['smart home status', 'turn on lights', 'control devices', 'check thermostat', 'home automation'],
+    specific: 'general',
+  },
+  {
+    pattern: /\b(lights|lighting|lamp|bulb)\b/i,
+    dataSources: ['smarthome'],
+    examples: ['turn on lights', 'dim living room lights', 'lighting status'],
+    specific: 'lights',
+  },
+  {
+    pattern: /\b(thermostat|temperature|heating|cooling|climate)\b/i,
+    dataSources: ['smarthome'],
+    examples: ['set thermostat', 'current temperature', 'adjust heating'],
+    specific: 'thermostat',
+  },
+  {
+    pattern: /\b(security|camera|lock|alarm|motion)\b/i,
+    dataSources: ['smarthome'],
+    examples: ['security status', 'camera feed', 'lock doors', 'motion detected'],
+    specific: 'security',
+  },
+  {
+    pattern: /\b(energy|power|usage|consumption)\b/i,
+    dataSources: ['smarthome'],
+    examples: ['energy usage', 'power consumption', 'electricity today'],
+    specific: 'energy',
+  },
+  {
+    pattern: /\b(music|song|track|playing|amazon music|spotify|artist|album|playlist)\b/i,
+    dataSources: ['amazonmusic'],
+    examples: ['what\'s playing?', 'current song', 'my music', 'amazon music', 'what track is this?'],
+    specific: 'currentlyPlaying',
+  },
+  {
+    pattern: /\b(recently played|recent music|last played|music history)\b/i,
+    dataSources: ['amazonmusic'],
+    examples: ['recently played songs', 'recent music', 'what did I listen to?'],
+    specific: 'recentTracks',
+  },
+  {
+    pattern: /\b(music stats|listening habits|top songs|music summary|music taste)\b/i,
+    dataSources: ['amazonmusic'],
+    examples: ['my music stats', 'listening habits', 'top songs', 'music summary'],
+    specific: 'stats',
   },
 ];
 

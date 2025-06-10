@@ -14,6 +14,9 @@ const ChatInputSchema = z.object({
   oauthToken: z.string().optional().describe("User's OAuth token for API calls, if available and relevant for tools."),
   calendarToken: z.string().optional().describe("User's Calendar-specific OAuth token, if available."),
   healthToken: z.string().optional().describe("User's Health-specific OAuth token, if available."),
+  emailToken: z.string().optional().describe("User's Email-specific OAuth token, if available."),
+  smartHomeToken: z.string().optional().describe("User's Smart Home OAuth token, if available."),
+  amazonMusicToken: z.string().optional().describe("User's Amazon Music OAuth token, if available."),
 });
 
 export type ChatInput = z.infer<typeof ChatInputSchema>;
@@ -91,6 +94,9 @@ export async function chatWithAI(input: ChatInput): Promise<ChatOutput> {
     const queryLower = input.prompt.toLowerCase();
     const isCalendarQuery = /\b(calendar|schedule|event|meeting|appointment|today|tomorrow|this week|next week)\b/i.test(queryLower);
     const isHealthQuery = /\b(steps|heart|sleep|activity|health|fitness|workout|exercise)\b/i.test(queryLower);
+    const isEmailQuery = /\b(email|inbox|unread|gmail|mail|messages|actionable|reply|send)\b/i.test(queryLower);
+    const isSmartHomeQuery = /\b(smart home|devices|lights|thermostat|camera|speaker|home automation|control|turn on|turn off|energy|security)\b/i.test(queryLower);
+    const isAmazonMusicQuery = /\b(music|song|track|playing|amazon music|spotify|artist|album|playlist|recently played|music stats)\b/i.test(queryLower);
     
     if (isCalendarQuery && input.calendarToken) {
       bestToken = input.calendarToken;
@@ -98,12 +104,30 @@ export async function chatWithAI(input: ChatInput): Promise<ChatOutput> {
     } else if (isHealthQuery && input.healthToken) {
       bestToken = input.healthToken;
       console.log('🚀 [NewChatFlow] Using health-specific token for health query');
-    } else if (input.calendarToken && !input.healthToken) {
+    } else if (isEmailQuery && input.emailToken) {
+      bestToken = input.emailToken;
+      console.log('🚀 [NewChatFlow] Using email-specific token for email query');
+    } else if (isSmartHomeQuery && input.smartHomeToken) {
+      bestToken = input.smartHomeToken;
+      console.log('🚀 [NewChatFlow] Using smart home token for smart home query');
+    } else if (isAmazonMusicQuery && input.amazonMusicToken) {
+      bestToken = input.amazonMusicToken;
+      console.log('🚀 [NewChatFlow] Using Amazon Music token for music query');
+    } else if (input.calendarToken && !input.healthToken && !input.emailToken && !input.smartHomeToken && !input.amazonMusicToken) {
       bestToken = input.calendarToken;
       console.log('🚀 [NewChatFlow] Using available calendar token');
-    } else if (input.healthToken && !input.calendarToken) {
+    } else if (input.healthToken && !input.calendarToken && !input.emailToken && !input.smartHomeToken && !input.amazonMusicToken) {
       bestToken = input.healthToken;
       console.log('🚀 [NewChatFlow] Using available health token');
+    } else if (input.emailToken && !input.calendarToken && !input.healthToken && !input.smartHomeToken && !input.amazonMusicToken) {
+      bestToken = input.emailToken;
+      console.log('🚀 [NewChatFlow] Using available email token');
+    } else if (input.smartHomeToken && !input.calendarToken && !input.healthToken && !input.emailToken && !input.amazonMusicToken) {
+      bestToken = input.smartHomeToken;
+      console.log('🚀 [NewChatFlow] Using available smart home token');
+    } else if (input.amazonMusicToken && !input.calendarToken && !input.healthToken && !input.emailToken && !input.smartHomeToken) {
+      bestToken = input.amazonMusicToken;
+      console.log('🚀 [NewChatFlow] Using available Amazon Music token');
     }
     
     // Convert chat input to orchestration input

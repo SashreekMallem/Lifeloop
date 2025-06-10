@@ -5,77 +5,120 @@ import WidgetCard from "./WidgetCard";
 import { Smile, BrainCircuit, Frown, Meh, Loader2, AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { detectMood, type DetectMoodOutput, type DetectMoodInput } from '@/ai/flows/mood-detection';
+import { getCalendarEvents, type GetCalendarEventsInput } from '@/ai/flows/calendar-events-flow';
+import { getHealthSummary, type HealthSummaryInput } from '@/ai/flows/health-data-flow';
+import { authManager } from '@/lib/auth-manager';
 
 interface MoodWidgetProps {
   className?: string;
 }
-
-const sampleInputs: DetectMoodInput[] = [
-  {
-    sleepData: "Slept for 7.5 hours, fairly restful, woke up once.",
-    activityData: "Morning run 5km, moderate heart rate. Afternoon desk work.",
-    calendarEvents: "Team sync at 10 AM, Project deadline review at 3 PM."
-  },
-  {
-    sleepData: "Only 5 hours of broken sleep, feeling tired.",
-    activityData: "No significant activity, mostly sedentary.",
-    calendarEvents: "Multiple urgent meetings, critical bug report received."
-  },
-  {
-    sleepData: "8 hours of deep sleep, woke up refreshed.",
-    activityData: "Yoga session in the morning, light walk in the evening.",
-    calendarEvents: "Client presentation went well. Quiet evening planned."
-  },
-  {
-    sleepData: "6 hours, tossed and turned a bit.",
-    activityData: "Missed workout, feeling a bit sluggish.",
-    calendarEvents: "No major events, routine tasks."
-  }
-];
 
 
 const MoodWidget = ({ className }: MoodWidgetProps) => {
   const [moodData, setMoodData] = useState<DetectMoodOutput | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentSampleInput, setCurrentSampleInput] = useState<DetectMoodInput | null>(null);
 
-  useEffect(() => {
-    // Select a random sample input on mount
-    const randomIndex = Math.floor(Math.random() * sampleInputs.length);
-    const selectedInput = sampleInputs[randomIndex];
-    setCurrentSampleInput(selectedInput);
-
-    const fetchMood = async (input: DetectMoodInput) => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const result = await detectMood(input);
-        setMoodData(result);
-      } catch (err) {
-        console.error("Error fetching mood data:", err);
-        setError("Failed to analyze affective state. AI core might be experiencing fluctuations.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchMood(selectedInput);
-  }, []);
-
-  const handleRefresh = async () => {
-    const selectedInput = sampleInputs[Math.floor(Math.random() * sampleInputs.length)];
+  const analyzeRealMoodData = async () => {
     setIsLoading(true);
     setError(null);
+    
     try {
-      const result = await detectMood(selectedInput);
+      // Get real data to analyze mood
+      const calendarToken = authManager.getToken('calendar');
+      const healthToken = authManager.getToken('health');
+      const currentUser = authManager.getCurrentUser();
+
+      let sleepData = "Sleep data not available";
+      let activityData = "Activity data not available";
+      let calendarEvents = "Calendar data not available";
+
+      // Get health data for sleep and activity analysis
+      if (healthToken) {
+        try {
+          const healthInput: HealthSummaryInput = { oauthToken: healthToken };
+          const healthResult = await getHealthSummary(healthInput);
+          
+          if (healthResult.status === 'success') {
+            const sleepHours = healthResult.sleepDurationMinutes ? 
+              (healthResult.sleepDurationMinutes / 60).toFixed(1) : 'N/A';
+            
+            if (healthResult.sleepDurationMinutes) {
+              const quality = healthResult.sleepDurationMinutes >= 420 ? 'good' : 
+                            healthResult.sleepDurationMinutes >= 300 ? 'fair' : 'poor';
+              sleepData = `Slept for ${sleepHours} hours, quality: ${quality}`;
+            }
+            
+            if (healthResult.steps) {
+              const activityLevel = healthResult.steps >= 10000 ? 'very active' :
+                                  healthResult.steps >= 8000 ? 'active' :
+                                  healthResult.steps >= 5000 ? 'moderate' : 'low activity';
+              activityData = `${healthResult.steps} steps today (${activityLevel})`;
+              
+              if (healthResult.activeMinutes) {
+                activityData += `, ${healthResult.activeMinutes} active minutes`;
+              }
+            }
+          }
+        } catch (err) {
+          console.warn("Failed to fetch health data for mood analysis:", err);
+        }
+      }
+
+      // Get calendar data for stress/workload analysis
+      if (calendarToken && currentUser) {
+        try {
+          const calendarInput: GetCalendarEventsInput = {
+            oauthToken: calendarToken,
+            calendarId: 'primary',
+            maxResults: 10
+          };
+          const calendarResult = await getCalendarEvents(calendarInput);
+          
+          if (calendarResult.status === 'success' && calendarResult.events) {
+            const todayEvents = calendarResult.events.filter(event => {
+              if (!event.start?.dateTime) return false;
+              const eventDate = new Date(event.start.dateTime);
+              const today = new Date();
+              return eventDate.toDateString() === today.toDateString();
+            });
+            
+            if (todayEvents.length === 0) {
+              calendarEvents = "Light schedule today, no major events";
+            } else if (todayEvents.length <= 3) {
+              calendarEvents = `${todayEvents.length} meetings today: ${todayEvents.map(e => e.summary).join(', ')}`;
+            } else {
+              calendarEvents = `Busy day with ${todayEvents.length} meetings and events`;
+            }
+          }
+        } catch (err) {
+          console.warn("Failed to fetch calendar data for mood analysis:", err);
+        }
+      }
+
+      // Create mood analysis input from real data
+      const input: DetectMoodInput = {
+        sleepData,
+        activityData,
+        calendarEvents
+      };
+
+      const result = await detectMood(input);
       setMoodData(result);
     } catch (err) {
-      console.error("Error fetching mood data:", err);
-      setError("Failed to analyze affective state. AI core might be experiencing fluctuations.");
+      console.error("Error analyzing mood:", err);
+      setError("Failed to analyze mood. Please try again.");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  useEffect(() => {
+    analyzeRealMoodData();
+  }, []);
+
+  const handleRefresh = () => {
+    analyzeRealMoodData();
   };
 
   const getMoodVisuals = (mood?: string) => {
@@ -117,7 +160,6 @@ const MoodWidget = ({ className }: MoodWidgetProps) => {
         <div className="flex flex-col items-center justify-center h-full min-h-[150px]">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="mt-2 text-muted-foreground">Analyzing sentiment data...</p>
-           {currentSampleInput && <p className="text-xs text-muted-foreground/50 mt-1">Based on simulated data...</p>}
         </div>
       )}
       {error && !isLoading && (

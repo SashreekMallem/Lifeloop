@@ -11,6 +11,9 @@ const auth = getAuth(app);
 interface AuthTokens {
   calendar?: string;
   health?: string;
+  email?: string;
+  smarthome?: string;
+  amazonmusic?: string;
   userId?: string;
 }
 
@@ -46,6 +49,13 @@ class AuthManager {
   }
 
   /**
+   * Get the current authenticated user
+   */
+  public getCurrentUser(): User | null {
+    return this.currentUser;
+  }
+
+  /**
    * Add listener for auth state changes
    */
   public onAuthStateChange(callback: (user: User | null) => void): () => void {
@@ -65,7 +75,7 @@ class AuthManager {
   /**
    * Store OAuth token securely with user association
    */
-  public storeToken(service: 'calendar' | 'health', token: string, userId: string): void {
+  public storeToken(service: 'calendar' | 'health' | 'email' | 'smarthome' | 'amazonmusic', token: string, userId: string): void {
     try {
       console.log(`[AuthManager] Storing ${service} token for user:`, userId);
       
@@ -80,6 +90,15 @@ class AuthManager {
       } else if (service === 'health') {
         sessionStorage.setItem(`firebase_oauth_token_${userId}_fit`, token);
         sessionStorage.setItem('firebase_oauth_token_current_user_id_fit', userId);
+      } else if (service === 'email') {
+        sessionStorage.setItem(`firebase_oauth_token_${userId}_gmail`, token);
+        sessionStorage.setItem('firebase_oauth_token_current_user_id_gmail', userId);
+      } else if (service === 'smarthome') {
+        sessionStorage.setItem(`firebase_oauth_token_${userId}_smarthome`, token);
+        sessionStorage.setItem('firebase_oauth_token_current_user_id_smarthome', userId);
+      } else if (service === 'amazonmusic') {
+        sessionStorage.setItem(`firebase_oauth_token_${userId}_amazonmusic`, token);
+        sessionStorage.setItem('firebase_oauth_token_current_user_id_amazonmusic', userId);
       }
     } catch (error) {
       console.error(`[AuthManager] Failed to store ${service} token:`, error);
@@ -89,7 +108,7 @@ class AuthManager {
   /**
    * Get OAuth token for a service
    */
-  public getToken(service: 'calendar' | 'health'): string | null {
+  public getToken(service: 'calendar' | 'health' | 'email' | 'smarthome' | 'amazonmusic'): string | null {
     try {
       const currentUserId = this.currentUser?.uid;
       if (!currentUserId) {
@@ -130,6 +149,39 @@ class AuthManager {
             return token;
           }
         }
+      } else if (service === 'email') {
+        const legacyUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id_gmail');
+        if (legacyUserId === currentUserId) {
+          const token = sessionStorage.getItem(`firebase_oauth_token_${currentUserId}_gmail`);
+          if (token) {
+            console.log(`[AuthManager] Found email token (legacy format)`);
+            // Migrate to new format
+            this.storeToken('email', token, currentUserId);
+            return token;
+          }
+        }
+      } else if (service === 'smarthome') {
+        const legacyUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id_smarthome');
+        if (legacyUserId === currentUserId) {
+          const token = sessionStorage.getItem(`firebase_oauth_token_${currentUserId}_smarthome`);
+          if (token) {
+            console.log(`[AuthManager] Found smart home token (legacy format)`);
+            // Migrate to new format
+            this.storeToken('smarthome', token, currentUserId);
+            return token;
+          }
+        }
+      } else if (service === 'amazonmusic') {
+        const legacyUserId = sessionStorage.getItem('firebase_oauth_token_current_user_id_amazonmusic');
+        if (legacyUserId === currentUserId) {
+          const token = sessionStorage.getItem(`firebase_oauth_token_${currentUserId}_amazonmusic`);
+          if (token) {
+            console.log(`[AuthManager] Found Amazon Music token (legacy format)`);
+            // Migrate to new format
+            this.storeToken('amazonmusic', token, currentUserId);
+            return token;
+          }
+        }
       }
 
       console.log(`[AuthManager] No ${service} token found for current user`);
@@ -141,23 +193,33 @@ class AuthManager {
   }
 
   /**
-   * Get best available token (health first, then calendar)
+   * Get best available token (health first, then calendar, then email, then smarthome, then amazonmusic)
    */
   public getBestToken(): string | null {
-    return this.getToken('health') || this.getToken('calendar');
+    return this.getToken('health') || this.getToken('calendar') || this.getToken('email') || this.getToken('smarthome') || this.getToken('amazonmusic');
   }
 
   /**
    * Validate token by making a test API call
    */
-  public async validateToken(service: 'calendar' | 'health', token: string): Promise<TokenValidationResult> {
+  public async validateToken(service: 'calendar' | 'health' | 'email' | 'smarthome' | 'amazonmusic', token: string): Promise<TokenValidationResult> {
     try {
       let testUrl: string;
       
       if (service === 'calendar') {
         testUrl = 'https://www.googleapis.com/calendar/v3/calendars/primary';
-      } else {
+      } else if (service === 'health') {
         testUrl = 'https://www.googleapis.com/fitness/v1/users/me/dataSources';
+      } else if (service === 'email') {
+        testUrl = 'https://gmail.googleapis.com/gmail/v1/users/me/profile';
+      } else if (service === 'smarthome') {
+        testUrl = 'https://homegraph.googleapis.com/v1/devices:query';
+      } else if (service === 'amazonmusic') {
+        // Amazon Music uses Login with Amazon (LWA) OAuth tokens
+        // Validate by making a test API call
+        testUrl = 'https://music-api.amazon.dev/v1/me/profile';
+      } else {
+        return { isValid: false, needsRefresh: false, error: 'Unknown service' };
       }
 
       const response = await fetch(testUrl, {
@@ -181,7 +243,7 @@ class AuthManager {
   /**
    * Remove token for a service
    */
-  public removeToken(service: 'calendar' | 'health'): void {
+  public removeToken(service: 'calendar' | 'health' | 'email' | 'smarthome' | 'amazonmusic'): void {
     try {
       const currentUserId = this.currentUser?.uid;
       if (!currentUserId) return;
@@ -199,6 +261,15 @@ class AuthManager {
       } else if (service === 'health') {
         sessionStorage.removeItem(`firebase_oauth_token_${currentUserId}_fit`);
         sessionStorage.removeItem('firebase_oauth_token_current_user_id_fit');
+      } else if (service === 'email') {
+        sessionStorage.removeItem(`firebase_oauth_token_${currentUserId}_gmail`);
+        sessionStorage.removeItem('firebase_oauth_token_current_user_id_gmail');
+      } else if (service === 'smarthome') {
+        sessionStorage.removeItem(`firebase_oauth_token_${currentUserId}_smarthome`);
+        sessionStorage.removeItem('firebase_oauth_token_current_user_id_smarthome');
+      } else if (service === 'amazonmusic') {
+        sessionStorage.removeItem(`firebase_oauth_token_${currentUserId}_amazonmusic`);
+        sessionStorage.removeItem('firebase_oauth_token_current_user_id_amazonmusic');
       }
     } catch (error) {
       console.error(`[AuthManager] Error removing ${service} token:`, error);
@@ -212,13 +283,16 @@ class AuthManager {
     console.log('[AuthManager] Clearing all tokens');
     this.removeToken('calendar');
     this.removeToken('health');
+    this.removeToken('email');
+    this.removeToken('smarthome');
+    this.removeToken('amazonmusic');
   }
 
   /**
    * Check if user has any valid tokens
    */
   public hasAnyToken(): boolean {
-    return !!(this.getToken('calendar') || this.getToken('health'));
+    return !!(this.getToken('calendar') || this.getToken('health') || this.getToken('email') || this.getToken('smarthome') || this.getToken('amazonmusic'));
   }
 
   /**
@@ -228,6 +302,9 @@ class AuthManager {
     return {
       calendar: this.getToken('calendar') || undefined,
       health: this.getToken('health') || undefined,
+      email: this.getToken('email') || undefined,
+      smarthome: this.getToken('smarthome') || undefined,
+      amazonmusic: this.getToken('amazonmusic') || undefined,
       userId: this.currentUser?.uid,
     };
   }
@@ -238,14 +315,23 @@ class AuthManager {
   public async validateAndRefreshTokens(): Promise<{
     calendar: TokenValidationResult | null;
     health: TokenValidationResult | null;
+    email: TokenValidationResult | null;
+    smarthome: TokenValidationResult | null;
+    applemusic: TokenValidationResult | null;
   }> {
     const results = {
       calendar: null as TokenValidationResult | null,
       health: null as TokenValidationResult | null,
+      email: null as TokenValidationResult | null,
+      smarthome: null as TokenValidationResult | null,
+      applemusic: null as TokenValidationResult | null,
     };
 
     const calendarToken = this.getToken('calendar');
     const healthToken = this.getToken('health');
+    const emailToken = this.getToken('email');
+    const smartHomeToken = this.getToken('smarthome');
+    const amazonMusicToken = this.getToken('amazonmusic');
 
     if (calendarToken) {
       results.calendar = await this.validateToken('calendar', calendarToken);
@@ -260,6 +346,30 @@ class AuthManager {
       if (!results.health.isValid) {
         console.log('[AuthManager] Health token invalid, removing');
         this.removeToken('health');
+      }
+    }
+
+    if (emailToken) {
+      results.email = await this.validateToken('email', emailToken);
+      if (!results.email.isValid) {
+        console.log('[AuthManager] Email token invalid, removing');
+        this.removeToken('email');
+      }
+    }
+
+    if (smartHomeToken) {
+      results.smarthome = await this.validateToken('smarthome', smartHomeToken);
+      if (!results.smarthome.isValid) {
+        console.log('[AuthManager] Smart Home token invalid, removing');
+        this.removeToken('smarthome');
+      }
+    }
+
+    if (amazonMusicToken) {
+      results.applemusic = await this.validateToken('amazonmusic', amazonMusicToken);
+      if (!results.applemusic.isValid) {
+        console.log('[AuthManager] Amazon Music token invalid, removing');
+        this.removeToken('amazonmusic');
       }
     }
 

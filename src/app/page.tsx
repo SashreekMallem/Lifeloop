@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import AmazonMusicWidget from '@/components/life-os/widgets/AmazonMusicWidget';
 import { getAuth, type User } from 'firebase/auth';
 import { app } from '@/lib/firebase/client';
 import { authManager } from '@/lib/auth-manager';
@@ -14,20 +15,33 @@ import CalendarWidget from "@/components/life-os/widgets/CalendarWidget";
 import HealthDataWidget from "@/components/life-os/widgets/HealthDataWidget";
 import MoodWidget from "@/components/life-os/widgets/MoodWidget";
 import TasksWidget from "@/components/life-os/widgets/TasksWidget";
+import MeetingsWidget from "@/components/life-os/widgets/MeetingsWidget";
 import MorningSummaryWidget from "@/components/life-os/widgets/MorningSummaryWidget";
 import PersonalizedInsightsWidget from "@/components/life-os/widgets/PersonalizedInsightsWidget";
 import IntelligentSuggestionsWidget from "@/components/life-os/widgets/IntelligentSuggestionsWidget";
+import EmailWidget from "@/components/life-os/widgets/EmailWidget";
+import SmartHomeWidget from "@/components/life-os/widgets/SmartHomeWidget";
+import AppleMusicWidget from "@/components/life-os/widgets/AppleMusicWidget";
 
 // Icons
 import { 
   Bot, Send, Cloud, Calendar, Heart, Activity, Target, Brain, Sparkles, 
-  Compass, LineChart, BookOpen, Menu, X, MoreVertical, Star, ChevronRight, Shuffle
+  Compass, LineChart, BookOpen, Menu, X, MoreVertical, Star, ChevronRight, Shuffle,
+  MessageCircle, Maximize2, Minimize2, MessageSquare, Mail, Home, Music
 } from 'lucide-react';
 
 // AI Chat functionality
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { chatWithAI, type ChatInput, type ChatOutput } from '@/ai/flows/chat-flow-new';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle,
+  DialogTrigger,
+  DialogClose
+} from "@/components/ui/dialog";
 
 const auth = getAuth(app);
 
@@ -43,56 +57,36 @@ export default function LuxeLifeInterface() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<{id: string, sender: string, text: string}[]>([]);
   const [isAiResponding, setIsAiResponding] = useState(false);
+  const [aiChatDialogOpen, setAiChatDialogOpen] = useState(false);
 
   // Content-aware adaptive widget sizing based on actual content dimensions
   const [adaptiveWidgetSizes, setAdaptiveWidgetSizes] = useState<{[key: string]: {gridColumn: number, gridRow: number}}>({});
   const widgetRefs = useRef<{[key: string]: HTMLDivElement | null}>({});
 
-  // Measure widget content and automatically assign grid spans
+  // Apple-style grid system: Measure widget content and automatically assign optimal grid spans
   const measureAndAssignSizes = useCallback(() => {
     const measurements: {[key: string]: {gridColumn: number, gridRow: number}} = {};
+    const GRID_COLUMNS = 12;
+    const GRID_CELL_WIDTH = containerRef.current ? containerRef.current.offsetWidth / GRID_COLUMNS : 100;
+    const GRID_ROW_HEIGHT = 60;
     
     Object.keys(widgetRefs.current).forEach(widgetKey => {
       const element = widgetRefs.current[widgetKey];
       if (!element) return;
-
-      // Get the actual content dimensions
       const content = element.querySelector('.widget-content') || element;
       const scrollHeight = content.scrollHeight;
       const scrollWidth = content.scrollWidth;
-      
-      // Calculate needed grid spans based on content
-      // Column spans: based on content width and complexity
-      let columnSpan = 2; // Default
-      if (scrollWidth > 400 || widgetKey === 'calendar' || widgetKey === 'insights') {
-        columnSpan = 4; // Wide content
-      } else if (scrollWidth > 300 || widgetKey === 'health' || widgetKey === 'tasks') {
-        columnSpan = 3; // Medium content
-      } else if (widgetKey === 'mood' && scrollHeight < 200) {
-        columnSpan = 2; // Compact content
-      }
-      
-      // Row spans: based on content height
-      let rowSpan = Math.ceil(scrollHeight / 80); // 80px per grid row
-      rowSpan = Math.max(2, Math.min(6, rowSpan)); // Clamp between 2-6 rows
-      
-      // Special cases for specific widgets
-      if (widgetKey === 'weather' && scrollHeight < 250) {
-        rowSpan = 3; // Ensure weather content is fully visible
-      }
-      if (widgetKey === 'mood' && scrollHeight < 200) {
-        rowSpan = 2; // Compact mood display
-      }
-      if (widgetKey === 'health') {
-        rowSpan = Math.max(4, rowSpan); // Health needs minimum space for metrics
-      }
-      
+      // Calculate column span based on content width
+      let columnSpan = Math.ceil(scrollWidth / GRID_CELL_WIDTH);
+      columnSpan = Math.max(2, Math.min(columnSpan, GRID_COLUMNS));
+      // Calculate row span based on content height
+      let rowSpan = Math.ceil(scrollHeight / GRID_ROW_HEIGHT);
+      rowSpan = Math.max(2, Math.min(rowSpan, 8));
       measurements[widgetKey] = {
         gridColumn: columnSpan,
         gridRow: rowSpan
       };
     });
-    
     setAdaptiveWidgetSizes(measurements);
   }, []);
 
@@ -149,7 +143,7 @@ export default function LuxeLifeInterface() {
         setMessages([{
           id: 'welcome',
           sender: 'ai',
-          text: `Welcome back, ${user.displayName || 'friend'}. I can help you manage your calendar events and check your health data. How can I assist you today?`
+          text: `Welcome back, ${user.displayName || 'friend'}. I can help you manage your calendar events, check your health data, and summarize your email activity. How can I assist you today?`
         }]);
       }
     });
@@ -184,6 +178,7 @@ export default function LuxeLifeInterface() {
       let oauthToken: string | undefined = undefined;
       let calendarToken: string | undefined = undefined;
       let healthToken: string | undefined = undefined;
+      let emailToken: string | undefined = undefined;
       const firebaseUser = auth.currentUser;
       
       if (firebaseUser) {
@@ -192,16 +187,18 @@ export default function LuxeLifeInterface() {
         // Get service-specific tokens
         calendarToken = authManager.getToken('calendar') || undefined;
         healthToken = authManager.getToken('health') || undefined;
+        emailToken = authManager.getToken('email') || undefined;
         
         // Use the best available token as fallback
-        oauthToken = calendarToken || healthToken;
+        oauthToken = calendarToken || healthToken || emailToken;
         
         console.log("[handleSend] Calendar token available:", !!calendarToken);
         console.log("[handleSend] Health token available:", !!healthToken);
+        console.log("[handleSend] Email token available:", !!emailToken);
         console.log("[handleSend] Fallback token available:", !!oauthToken);
         
         // Auto-validate tokens if available to prevent unnecessary auth errors
-        if (calendarToken || healthToken) {
+        if (calendarToken || healthToken || emailToken) {
           authManager.validateAndRefreshTokens().then(results => {
             console.log("[handleSend] Token validation results:", results);
           }).catch(error => {
@@ -215,7 +212,8 @@ export default function LuxeLifeInterface() {
           prompt: userMessageText, 
           oauthToken,
           calendarToken,
-          healthToken
+          healthToken,
+          emailToken
         };
         const response: ChatOutput = await chatWithAI(chatInput);
         const aiMessage = { id: Date.now().toString() + '-ai', sender: 'ai', text: response.response };
@@ -247,7 +245,7 @@ export default function LuxeLifeInterface() {
   const sections = [
     { id: 'dashboard', label: 'Dashboard', icon: <Compass size={20} /> },
     { id: 'insights', label: 'Insights', icon: <LineChart size={20} /> },
-    { id: 'assistant', label: 'Assistant', icon: <Bot size={20} /> },
+    // { id: 'assistant', label: 'Assistant', icon: <Bot size={20} /> }, // Removed Assistant from nav
   ];
 
   // Format date for header
@@ -337,7 +335,7 @@ export default function LuxeLifeInterface() {
       </div>
     );
   }
-
+  // Ensure all previous JSX is properly closed before this return.
   return (
     <div className="luxe-canvas" ref={containerRef}>
       {/* Ambient Background Elements - Made subtle for better readability */}
@@ -463,7 +461,7 @@ export default function LuxeLifeInterface() {
           </div>
         </header>
         
-        {/* Dashboard Section - Full-screen widgets with floating AI assistant */}
+        {/* Dashboard Section - Full-screen widgets */}
         {activeSection === 'dashboard' && (
           <section className="luxe-section fullscreen-dashboard">
             {/* Dashboard Controls */}
@@ -474,7 +472,7 @@ export default function LuxeLifeInterface() {
                 title="Optimize Widget Layout"
               >
                 <Shuffle size={18} />
-                <span>Auto-size Widgets</span>
+                <span>Perfect Grid</span>
               </button>
             </div>
 
@@ -555,6 +553,51 @@ export default function LuxeLifeInterface() {
                 </div>
               </div>
               
+              {/* Morning Summary Widget */}
+              <div 
+                ref={getWidgetRef('morning')}
+                className="fullscreen-widget"
+                style={getAdaptiveStyle('morning')}
+              >
+                <div className="widget-header">
+                  <Sparkles size={20} />
+                  <span>Morning Summary</span>
+                </div>
+                <div className="widget-content">
+                  <MorningSummaryWidget />
+                </div>
+              </div>
+
+              {/* Meetings Widget */}
+              <div 
+                ref={getWidgetRef('meetings')}
+                className="fullscreen-widget"
+                style={getAdaptiveStyle('meetings')}
+              >
+                <div className="widget-header">
+                  <Calendar size={20} />
+                  <span>Meetings</span>
+                </div>
+                <div className="widget-content">
+                  <MeetingsWidget />
+                </div>
+              </div>
+
+              {/* Intelligent Suggestions Widget */}
+              <div 
+                ref={getWidgetRef('suggestions')}
+                className="fullscreen-widget"
+                style={getAdaptiveStyle('suggestions')}
+              >
+                <div className="widget-header">
+                  <Brain size={20} />
+                  <span>AI Suggestions</span>
+                </div>
+                <div className="widget-content">
+                  <IntelligentSuggestionsWidget />
+                </div>
+              </div>
+
               {/* Insights Widget */}
               <div 
                 ref={getWidgetRef('insights')}
@@ -562,78 +605,56 @@ export default function LuxeLifeInterface() {
                 style={getAdaptiveStyle('insights')}
               >
                 <div className="widget-header">
-                  <Brain size={20} />
+                  <BookOpen size={20} />
                   <span>Insights</span>
                 </div>
                 <div className="widget-content">
                   <PersonalizedInsightsWidget />
                 </div>
               </div>
-            </div>
 
-            {/* Floating AI Assistant - Bottom Right Corner */}
-            <div className="floating-ai-assistant">
-              <div className="ai-assistant-floating">
-                <div className="assistant-header-floating">
-                  <div className="assistant-icon">
-                    <Bot size={20} />
-                  </div>
-                  <span>AI Assistant</span>
+              {/* Email Widget */}
+              <div 
+                ref={getWidgetRef('email')}
+                className="fullscreen-widget"
+                style={getAdaptiveStyle('email')}
+              >
+                <div className="widget-header">
+                  <Mail size={20} />
+                  <span>Email</span>
                 </div>
-                
-                <div className="assistant-content-floating">
-                  {messages.length > 0 ? (
-                    <div className="chat-messages-floating">
-                      {messages.slice(-10).map((message) => (
-                        <div 
-                          key={message.id} 
-                          className={`chat-message-floating ${message.sender === 'user' ? 'user-message' : 'ai-message'}`}
-                        >
-                          <div className="message-content-floating">
-                            {message.text.length > 200 ? message.text.substring(0, 200) + '...' : message.text}
-                          </div>
-                        </div>
-                      ))}
-                      
-                      {isAiResponding && (
-                        <div className="chat-message-floating ai-message">
-                          <div className="message-content-floating thinking">
-                            <span className="thinking-dot"></span>
-                            <span className="thinking-dot"></span>
-                            <span className="thinking-dot"></span>
-                          </div>
-                        </div>
-                      )}
-                      <div ref={messagesEndRef} />
-                    </div>
-                  ) : (
-                    <div className="assistant-welcome-floating">
-                      <p>How can I help you today?</p>
-                    </div>
-                  )}
-                  
-                  <div className="assistant-input-floating">
-                    <Textarea
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      placeholder="Ask me anything..."
-                      className="assistant-textarea-floating"
-                      rows={1}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSend();
-                        }
-                      }}
-                    />
-                    <Button 
-                      onClick={handleSend} 
-                      disabled={isAiResponding || !input.trim()}
-                      className="assistant-send-btn-floating"
-                    >
-                      <Send size={14} />
-                    </Button>
-                  </div>
+                <div className="widget-content">
+                  <EmailWidget />
+                </div>
+              </div>
+
+              {/* Smart Home Widget */}
+              <div 
+                ref={getWidgetRef('smarthome')}
+                className="fullscreen-widget"
+                style={getAdaptiveStyle('smarthome')}
+              >
+                <div className="widget-header">
+                  <Home size={20} />
+                  <span>Smart Home</span>
+                </div>
+                <div className="widget-content">
+                  <SmartHomeWidget />
+                </div>
+              </div>
+
+              {/* Amazon Music Widget */}
+              <div 
+                ref={getWidgetRef('amazonmusic')}
+                className="fullscreen-widget"
+                style={getAdaptiveStyle('amazonmusic')}
+              >
+                <div className="widget-header">
+                  <Music size={20} />
+                  <span>Amazon Music</span>
+                </div>
+                <div className="widget-content">
+                  <AmazonMusicWidget />
                 </div>
               </div>
             </div>
@@ -690,18 +711,31 @@ export default function LuxeLifeInterface() {
             </div>
           </section>
         )}
-        
-        {/* Assistant Section */}
-        {activeSection === 'assistant' && (
-          <section className="luxe-section assistant-section">
-            <h2 className="section-title">Your Personal Assistant</h2>
-            
-            <div className="luxe-chat-container">
-              <div className="chat-messages">
+      </div>
+
+      {/* AI Chat Dialog */}
+      <Dialog open={aiChatDialogOpen} onOpenChange={setAiChatDialogOpen}>
+        <DialogContent className="ai-dialog-expanded">
+          <DialogHeader className="ai-dialog-header">
+            <DialogTitle className="ai-dialog-title">
+              <div className="ai-button-icon">
+                <Bot size={18} />
+              </div>
+              <span>AI Assistant</span>
+            </DialogTitle>
+            <DialogClose asChild>
+              <button className="ai-dialog-close">
+                <X size={18} />
+              </button>
+            </DialogClose>
+          </DialogHeader>
+          <div className="ai-dialog-content">
+            {messages.length > 0 ? (
+              <div className="ai-dialog-messages">
                 {messages.map((message) => (
                   <div 
                     key={message.id} 
-                    className={`chat-message ${message.sender === 'user' ? 'user-message' : 'ai-message'}`}
+                    className={`ai-message ${message.sender === 'user' ? 'user-message' : 'ai-message'}`}
                   >
                     <div className="message-avatar">
                       {message.sender === 'user' ? (
@@ -722,7 +756,7 @@ export default function LuxeLifeInterface() {
                 <div ref={messagesEndRef} />
                 
                 {isAiResponding && (
-                  <div className="chat-message ai-message">
+                  <div className="ai-message ai-message">
                     <div className="message-avatar">
                       <Bot size={20} />
                     </div>
@@ -734,79 +768,73 @@ export default function LuxeLifeInterface() {
                   </div>
                 )}
               </div>
-              
-              {messages.length === 0 && !isAiResponding && (
-                <div className="chat-welcome">
-                  <div className="welcome-icon">
-                    <Bot size={48} />
-                  </div>
-                  <h3>How can I assist you today?</h3>
-                  <div className="welcome-suggestions">
-                    <button 
-                      className="suggestion-btn"
-                      onClick={() => {
-                        setInput("What's on my calendar today?");
-                        setTimeout(() => handleSend(), 100);
-                      }}
-                    >
-                      What's on my calendar today?
-                    </button>
-                    <button 
-                      className="suggestion-btn"
-                      onClick={() => {
-                        setInput("Schedule a meeting tomorrow at 10am");
-                        setTimeout(() => handleSend(), 100);
-                      }}
-                    >
-                      Schedule a meeting tomorrow at 10am
-                    </button>
-                    <button 
-                      className="suggestion-btn"
-                      onClick={() => {
-                        setInput("How many steps did I take today?");
-                        setTimeout(() => handleSend(), 100);
-                      }}
-                    >
-                      How many steps did I take today?
-                    </button>
-                    <button 
-                      className="suggestion-btn"
-                      onClick={() => {
-                        setInput("How did I sleep last night?");
-                        setTimeout(() => handleSend(), 100);
-                      }}
-                    >
-                      How did I sleep last night?
-                    </button>
-                  </div>
+            ) : (
+              <div className="ai-dialog-welcome">
+                <div className="welcome-icon">
+                  <Bot size={32} />
                 </div>
-              )}
-              
-              <div className="chat-input">
-                <Textarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask me anything..."
-                  className="input-field"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSend();
-                    }
-                  }}
-                />
-                <Button 
-                  onClick={handleSend} 
-                  disabled={isAiResponding || !input.trim()}
-                  className="send-btn"
-                >
-                  <Send size={18} />
-                </Button>
+                <h3>How can I assist you today?</h3>
+                <div className="welcome-suggestions">
+                  {[ 
+                    "What's on my calendar today?",
+                    "Schedule a meeting tomorrow at 10am",
+                    "How many steps did I take today?",
+                    "How did I sleep last night?",
+                    "How many unread emails do I have?",
+                    "Show me my actionable emails"
+                  ].map(suggestion => (
+                    <button 
+                      key={suggestion}
+                      className="suggestion-chip"
+                      onClick={() => {
+                        setInput(suggestion);
+                        // Consider auto-sending or focusing input after selection
+                      }}
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
               </div>
+            )}
+            
+            <div className="ai-dialog-input">
+              <Textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask me anything..."
+                className="ai-input-field"
+                rows={1}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+              />
+              <Button 
+                onClick={handleSend} 
+                disabled={isAiResponding || !input.trim()}
+                className="ai-send-btn"
+              >
+                <Send size={16} />
+              </Button>
             </div>
-          </section>
-        )}
-      </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* AI Chat Trigger Button */}
+      {!aiChatDialogOpen && (
+        <div className="ai-dialog-container">
+          <button className="ai-assistant-button" onClick={() => setAiChatDialogOpen(true)}>
+            <div className="ai-button-icon">
+              <MessageSquare size={18} />
+            </div>
+            <span className="ai-button-text">AI Assistant</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

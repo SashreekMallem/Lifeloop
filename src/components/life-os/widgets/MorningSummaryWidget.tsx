@@ -5,68 +5,114 @@ import WidgetCard from "./WidgetCard";
 import { Sunrise, CalendarCheck, ListTodo, CloudSun, Bed, Loader2, AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { generateMorningSummary, type MorningSummaryOutput, type MorningSummaryInput } from '@/ai/flows/morning-summary';
+import { getCalendarEvents, type GetCalendarEventsInput } from '@/ai/flows/calendar-events-flow';
+import { getHealthSummary, type HealthSummaryInput } from '@/ai/flows/health-data-flow';
+import { getWeatherForecast, type WeatherForecastInput } from '@/ai/flows/weather-forecast-flow';
+import { authManager } from '@/lib/auth-manager';
 
 interface MorningSummaryWidgetProps {
   className?: string;
 }
-
-const sampleInputs: MorningSummaryInput[] = [
-  {
-    calendarEvents: "Today: 10 AM Project Alpha sync, 2 PM Client Demo. Tomorrow: Team workshop.",
-    healthData: "Sleep: 7h 30m (Good), Steps: 8,500 (Active), Heart Rate: Resting 62bpm.",
-    otherAppData: "Tasks: 3 high-priority tasks due. Weather: Sunny, 24°C. News: Tech stocks rally."
-  },
-  {
-    calendarEvents: "Light schedule today. Dentist appointment at 4 PM.",
-    healthData: "Sleep: 6h (Restless), Steps: 2,100 (Low), Heart Rate: Resting 70bpm.",
-    otherAppData: "Tasks: 1 overdue task. Weather: Cloudy with chance of rain. Focus Mode: Scheduled for 2 hours this afternoon."
-  },
-  {
-    calendarEvents: "Packed day: Morning marathon of meetings (9 AM - 1 PM), followed by an evening networking event.",
-    healthData: "Sleep: 8h (Excellent), Steps: 12,000 (Very Active), Heart Rate: Resting 58bpm.",
-    otherAppData: "Tasks: All caught up! Weather: Clear skies, perfect for the event. Reminders: Pick up dry cleaning."
-  }
-];
 
 const MorningSummaryWidget = ({ className }: MorningSummaryWidgetProps) => {
   const [summaryData, setSummaryData] = useState<MorningSummaryOutput | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchSummary = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const randomIndex = Math.floor(Math.random() * sampleInputs.length);
-        const input = sampleInputs[randomIndex];
-        const result = await generateMorningSummary(input);
-        setSummaryData(result);
-      } catch (err) {
-        console.error("Error fetching morning summary:", err);
-        setError("Failed to load morning summary. The AI core might be offline.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchSummary();
-  }, []);
-
-  const handleRefresh = async () => {
+  const fetchRealDataAndGenerateSummary = async () => {
     setIsLoading(true);
     setError(null);
+    
     try {
-      const randomIndex = Math.floor(Math.random() * sampleInputs.length);
-      const input = sampleInputs[randomIndex];
+      // Get OAuth tokens
+      const calendarToken = authManager.getToken('calendar');
+      const healthToken = authManager.getToken('health');
+      const currentUser = authManager.getCurrentUser();
+
+      // Fetch real data from APIs
+      let calendarEvents = "No calendar access";
+      let healthData = "No health data access";
+      let otherAppData = "";
+
+      // Fetch calendar events if token available
+      if (calendarToken && currentUser) {
+        try {
+          const calendarInput: GetCalendarEventsInput = {
+            oauthToken: calendarToken,
+            calendarId: 'primary',
+            maxResults: 5
+          };
+          const calendarResult = await getCalendarEvents(calendarInput);
+          
+          if (calendarResult.status === 'success' && calendarResult.events) {
+            const events = calendarResult.events.slice(0, 3);
+            if (events.length > 0) {
+              calendarEvents = events.map(event => {
+                const time = event.start?.dateTime ? 
+                  new Date(event.start.dateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 
+                  'All day';
+                return `${time} ${event.summary}`;
+              }).join(', ');
+            } else {
+              calendarEvents = "No events scheduled for today";
+            }
+          }
+        } catch (err) {
+          console.warn("Failed to fetch calendar events for morning summary:", err);
+        }
+      }
+
+      // Fetch health data if token available
+      if (healthToken) {
+        try {
+          const healthInput: HealthSummaryInput = { oauthToken: healthToken };
+          const healthResult = await getHealthSummary(healthInput);
+          
+          if (healthResult.status === 'success') {
+            const sleepHours = healthResult.sleepDurationMinutes ? 
+              (healthResult.sleepDurationMinutes / 60).toFixed(1) : 'N/A';
+            healthData = `Sleep: ${sleepHours}h, Steps: ${healthResult.steps || 0}, Heart Rate: ${healthResult.heartRateBpm || 'N/A'}bpm`;
+          }
+        } catch (err) {
+          console.warn("Failed to fetch health data for morning summary:", err);
+        }
+      }
+
+      // Fetch weather data
+      try {
+        const weatherInput: WeatherForecastInput = { location: "Cumming, Georgia" };
+        const weatherResult = await getWeatherForecast(weatherInput);
+        
+        // Weather API returns data directly without status wrapper
+        otherAppData = `Weather: ${weatherResult.condition}, ${weatherResult.temperature} in ${weatherResult.locationName}`;
+      } catch (err) {
+        console.warn("Failed to fetch weather data for morning summary:", err);
+        otherAppData = "Weather data unavailable";
+      }
+
+      // Generate morning summary with real data
+      const input: MorningSummaryInput = {
+        calendarEvents,
+        healthData,
+        otherAppData
+      };
+
       const result = await generateMorningSummary(input);
       setSummaryData(result);
     } catch (err) {
-      console.error("Error fetching morning summary:", err);
-      setError("Failed to load morning summary. The AI core might be offline.");
+      console.error("Error generating morning summary:", err);
+      setError("Failed to generate morning summary. Please try again.");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  useEffect(() => {
+    fetchRealDataAndGenerateSummary();
+  }, []);
+
+  const handleRefresh = () => {
+    fetchRealDataAndGenerateSummary();
   };
 
   return (

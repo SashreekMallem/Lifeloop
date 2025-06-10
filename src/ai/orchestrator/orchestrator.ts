@@ -1,10 +1,11 @@
 /**
- * @fileOverview Main orchestrator that coordinates data fetching and AI reasoning
- * This is the central brain that decides what data to fetch and how to present it to the LLM
+ * @fileOverview Main orchestrator that coordinates data fetching and AI reasoning with action capabilities
+ * This is the central brain that decides what data to fetch and actions to perform
  */
 
 import { detectIntent } from './data-registry';
 import { DATA_FETCHERS, type NormalizedData, type FetchContext } from './data-fetchers';
+import { addCalendarEventTool, editCalendarEventTool, deleteCalendarEventTool } from '../tools/calendar-tools';
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 
@@ -27,24 +28,42 @@ const OrchestrationOutputSchema = z.object({
 
 export type OrchestrationOutput = z.infer<typeof OrchestrationOutputSchema>;
 
-// Lightweight AI prompt for reasoning over fused data
+// Lightweight AI prompt for reasoning over fused data WITH action capabilities
 const reasoningPrompt = ai.definePrompt({
   name: 'lifeLoopReasoningPrompt',
   input: {
     schema: z.object({
       userQuery: z.string(),
       dataFusion: z.string(),
+      oauthToken: z.string().optional().describe('OAuth token for calendar operations'),
       availableActions: z.array(z.string()).optional(),
     })
   },
   output: { schema: OrchestrationOutputSchema },
+  tools: [addCalendarEventTool, editCalendarEventTool, deleteCalendarEventTool],
   system: `You are the AI brain of LifeLoop, a personal life operating system.
 
 Your role:
 - Answer the user's SPECIFIC question directly and concisely
+- ACTUALLY PERFORM ACTIONS when requested (like creating calendar events)
 - Only include relevant data that answers their question
 - Be helpful and context-aware
 - Use a friendly, personal tone
+
+Action Guidelines:
+- When user asks to "add/create/schedule a meeting/event", use addCalendarEventTool
+- When user asks to "edit/modify/change an event", use editCalendarEventTool  
+- When user asks to "delete/remove/cancel an event", use deleteCalendarEventTool
+- Always provide reasonable defaults for missing information (like 1-hour duration)
+- Use proper datetime formatting (ISO 8601)
+- ALWAYS use the provided oauthToken when calling calendar tools
+
+Calendar Event Guidelines:
+- For times like "8 PM" or "8", default to today at that time
+- Default duration is 1 hour if not specified
+- Use user's timezone context (assume Eastern Time if not specified)
+- Provide clear confirmation when events are created
+- When creating events, use "primary" as the calendarId
 
 Guidelines:
 - If they ask about ONE thing (like heart rate), focus ONLY on that
@@ -140,13 +159,14 @@ const orchestrationFlow = ai.defineFlow({
     'Adjust smart home settings',
   ];
 
-  // 5. Let the LLM reason over all the data
+  // 5. Let the LLM reason over all the data and potentially take actions
   console.log('🎯 [Orchestrator] Data fusion for LLM:', dataFusion);
   
   try {
     const { output } = await reasoningPrompt({
       userQuery: input.userQuery,
       dataFusion,
+      oauthToken: input.oauthToken,
       availableActions,
     });
 

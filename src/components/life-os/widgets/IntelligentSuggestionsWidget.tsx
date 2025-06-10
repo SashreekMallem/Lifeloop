@@ -5,69 +5,127 @@ import WidgetCard from "./WidgetCard";
 import { Lightbulb, Zap, Users, Loader2, AlertTriangle, Utensils, MessageSquare, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { suggest, type SuggestInput, type SuggestOutput } from '@/ai/flows/intelligent-suggestions';
+import { getCalendarEvents, type GetCalendarEventsInput } from '@/ai/flows/calendar-events-flow';
+import { getHealthSummary, type HealthSummaryInput } from '@/ai/flows/health-data-flow';
+import { authManager } from '@/lib/auth-manager';
 
 interface IntelligentSuggestionsWidgetProps {
   className?: string;
 }
-
-const sampleInputs: SuggestInput[] = [
-  {
-    expiringIngredients: ["Chicken breast", "Broccoli", "Lemon"],
-    historicalContacts: ["Dr. Aris Thorne (last contacted 2 months ago - research collaboration)", "Maya Lin (last contacted 3 weeks ago - project update)"],
-    userPreferences: "Prefers healthy, quick meals. Interested in reconnecting with professional contacts for potential collaborations."
-  },
-  {
-    expiringIngredients: ["Tofu", "Spinach", "Mushrooms"],
-    historicalContacts: ["Alex Chen (last contacted 1 week ago - casual check-in)", "Sarah Miller (last contacted 4 months ago - old colleague)"],
-    userPreferences: "Vegetarian, enjoys trying new recipes. Needs to follow up with recent contacts and consider reaching out to long-lost connections."
-  },
-  {
-    expiringIngredients: [],
-    historicalContacts: ["John Doe (last contacted 5 days ago - pending task)"],
-    userPreferences: "User is focused on task completion and might not be looking for new recipes or extensive social outreach today."
-  }
-];
-
 
 const IntelligentSuggestionsWidget = ({ className }: IntelligentSuggestionsWidgetProps) => {
   const [suggestions, setSuggestions] = useState<SuggestOutput | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchSuggestions = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const randomIndex = Math.floor(Math.random() * sampleInputs.length);
-        const input = sampleInputs[randomIndex];
-        const result = await suggest(input);
-        setSuggestions(result);
-      } catch (err) {
-        console.error("Error fetching intelligent suggestions:", err);
-        setError("Failed to load suggestions. AI core may be recalibrating.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchSuggestions();
-  }, []);
-
-  const handleRefresh = async () => {
+  const generateRealSuggestions = async () => {
     setIsLoading(true);
     setError(null);
+    
     try {
-      const randomIndex = Math.floor(Math.random() * sampleInputs.length);
-      const input = sampleInputs[randomIndex];
+      // Get real data to inform suggestions
+      const calendarToken = authManager.getToken('calendar');
+      const healthToken = authManager.getToken('health');
+      const currentUser = authManager.getCurrentUser();
+
+      // Gather context data
+      let userContext = "User preferences: Prefers productive, healthy lifestyle choices.";
+      let contacts: string[] = [];
+      let upcomingEvents: string[] = [];
+
+      // Get calendar context for contact suggestions
+      if (calendarToken && currentUser) {
+        try {
+          const calendarInput: GetCalendarEventsInput = {
+            oauthToken: calendarToken,
+            calendarId: 'primary',
+            maxResults: 10
+          };
+          const calendarResult = await getCalendarEvents(calendarInput);
+          
+          if (calendarResult.status === 'success' && calendarResult.events) {
+            // Extract contacts from calendar events (attendees not available in API response)
+            const recentContacts = new Set<string>();
+            calendarResult.events.forEach(event => {
+              // Note: Calendar API doesn't return attendees in the current schema
+              // Instead, we can suggest contacts based on meeting titles or descriptions
+              if (event.summary && (event.summary.includes('with') || event.summary.includes('meeting'))) {
+                // Extract potential contact info from event summaries
+                const summary = event.summary.toLowerCase();
+                if (summary.includes('with ')) {
+                  const contactMatch = event.summary.match(/with\s+([^,\n]+)/i);
+                  if (contactMatch) {
+                    recentContacts.add(`${contactMatch[1].trim()} (from ${event.summary})`);
+                  }
+                }
+              }
+            });
+            contacts = Array.from(recentContacts).slice(0, 3);
+            
+            // Track upcoming events for scheduling suggestions
+            upcomingEvents = calendarResult.events
+              .filter(event => event.start?.dateTime)
+              .slice(0, 2)
+              .map(event => event.summary || 'Untitled event');
+          }
+        } catch (err) {
+          console.warn("Failed to fetch calendar data for suggestions:", err);
+        }
+      }
+
+      // Get health context for wellness suggestions
+      if (healthToken) {
+        try {
+          const healthInput: HealthSummaryInput = { oauthToken: healthToken };
+          const healthResult = await getHealthSummary(healthInput);
+          
+          if (healthResult.status === 'success') {
+            const sleepHours = healthResult.sleepDurationMinutes ? 
+              (healthResult.sleepDurationMinutes / 60) : 0;
+            
+            if (sleepHours < 7) {
+              userContext += " May benefit from better sleep habits.";
+            }
+            if ((healthResult.steps || 0) < 8000) {
+              userContext += " Could increase daily activity.";
+            }
+            if (healthResult.heartRateBpm && healthResult.heartRateBpm > 80) {
+              userContext += " May benefit from stress management techniques.";
+            }
+          }
+        } catch (err) {
+          console.warn("Failed to fetch health data for suggestions:", err);
+        }
+      }
+
+      // Create intelligent input based on real data
+      const input: SuggestInput = {
+        expiringIngredients: [], // Could be integrated with grocery/meal planning apps
+        historicalContacts: contacts.length > 0 ? contacts : [
+          "Consider reaching out to colleagues for networking",
+          "Schedule catch-up calls with friends",
+          "Follow up on pending conversations"
+        ],
+        userPreferences: userContext + 
+          (upcomingEvents.length > 0 ? ` Upcoming: ${upcomingEvents.join(', ')}.` : " Schedule is flexible today.")
+      };
+
       const result = await suggest(input);
       setSuggestions(result);
     } catch (err) {
-      console.error("Error fetching intelligent suggestions:", err);
-      setError("Failed to generate suggestions. Cognitive systems may be offline.");
+      console.error("Error generating intelligent suggestions:", err);
+      setError("Failed to generate suggestions. Please try again.");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  useEffect(() => {
+    generateRealSuggestions();
+  }, []);
+
+  const handleRefresh = () => {
+    generateRealSuggestions();
   };
 
   return (
@@ -135,11 +193,6 @@ const IntelligentSuggestionsWidget = ({ className }: IntelligentSuggestionsWidge
             <p className="text-muted-foreground">No suggestions available currently.</p>
         </div>
       )}
-      <div className="absolute top-4 right-4">
-        <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isLoading}>
-          <RefreshCw className="h-5 w-5" />
-        </Button>
-      </div>
     </WidgetCard>
   );
 };
